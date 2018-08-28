@@ -1,4 +1,4 @@
-# Written By Parker Kain
+# Written By Parker Kain.
 # Goal: Use numpy to create a basic reservoir system without learning.
 
 import numpy as np
