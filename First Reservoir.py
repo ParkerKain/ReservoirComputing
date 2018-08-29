@@ -10,14 +10,24 @@ def main(verbose = True):
     #Set seed
     np.random.seed(10)
     
+    #Set hyperparameters
+    epochs = 3
+    
     #Initialize Weight matricies, establish inputs
-    (u, x, y, W_i2r, W_b2r, W_r2r, W_r2o, W_b2o) = init(verbose)
+    (u, x, W_i2r, W_b2r, W_r2r, W_r2o, W_b2o) = init(verbose)
     
-    #Passthrough Reservoir
-    x = reservoirPass(u, x, W_i2r, W_r2r, W_b2r, verbose)
-    
-    #Passthrough Readout
-    y = readoutPass(x, W_r2o, W_b2o, verbose)
+    #Begin Epochs
+    for e in range(epochs):
+        print('--------------------------------------------------------')
+        print('                EPOCH NUMBER', e+1)
+        print('--------------------------------------------------------')
+
+        
+        #Passthrough Reservoir
+        x = reservoirPass(u, x, W_i2r, W_r2r, W_b2r, verbose)
+        
+        #Passthrough Readout
+        y = readoutPass(x, W_r2o, W_b2o, verbose)
 
 #----------------------------------------------------------------------------    
     
@@ -27,7 +37,6 @@ def init(verbose):
     print('Creating input array ...')
     u = np.array([[1],[1]])
     x = np.array([[0],[0]])
-    y = 0
     
     if(verbose):
         print('Input (u)...')
@@ -35,9 +44,6 @@ def init(verbose):
         
         print('Starting Reservoir State (x)...')
         print(x, '\n')
-        
-        print('Starting Output (y)...')
-        print(y, '\n')
         
     
     #Create reservoir weight matricies
@@ -71,15 +77,15 @@ def init(verbose):
         print(W_b2o, '\n')
         print('--------------------------------------------------------')
 
-    return(u, x, y, W_i2r, W_b2r, W_r2r, W_r2o, W_b2o)
+    return(u, x, W_i2r, W_b2r, W_r2r, W_r2o, W_b2o)
     
 #----------------------------------------------------------------------------    
     
 def reservoirPass(u, x, W_i2r, W_r2r, W_b2r, verbose):
     
     print('Beginning Reservoir Passthrough ... ')
-    
     #Pass through the reservoir
+    oldX = x #Just storing to print if verbose
     x = (W_r2r.T @ x) + (W_i2r.T @ u) + (W_b2r)
     
     if(verbose):
@@ -87,7 +93,7 @@ def reservoirPass(u, x, W_i2r, W_r2r, W_b2r, verbose):
         print(W_i2r.T @ u, '\n')
         
         print('Res to Res Part ...')
-        print(W_r2r.T @ x, '\n')
+        print(W_r2r.T @ oldX, '\n')
         
         print('Bias to Res Part ...')
         print(W_b2r, '\n')
@@ -123,5 +129,5 @@ def readoutPass(x, W_r2o, W_b2o, verbose):
     
     
 #----------------------
-main(verbose = False)
+main(verbose = True)
 #----------------------
