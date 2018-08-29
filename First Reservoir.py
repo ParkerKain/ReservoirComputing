@@ -14,7 +14,8 @@ def main(verbose = True):
     epochs = 3
     
     #Initialize Weight matricies, establish inputs
-    (u, x, W_i2r, W_b2r, W_r2r, W_r2o, W_b2o) = init(verbose)
+    (u_tot, x, W_i2r, W_b2r, W_r2r, W_r2o, W_b2o) = init(verbose)
+    num_inputs = u_tot.shape[1]
     
     #Begin Epochs
     for e in range(epochs):
@@ -22,7 +23,11 @@ def main(verbose = True):
         print('                EPOCH NUMBER', e+1)
         print('--------------------------------------------------------')
 
-        
+        if e < num_inputs:
+            u = u_tot[:,[e]]
+        else:
+            u = np.array([[0],[0]])
+    
         #Passthrough Reservoir
         x = reservoirPass(u, x, W_i2r, W_r2r, W_b2r, verbose)
         
@@ -35,12 +40,12 @@ def init(verbose):
 
     #Create input vector (a single number)
     print('Creating input array ...')
-    u = np.array([[1],[1]])
+    u_tot = np.array([[1, 2],[1, 2]])
     x = np.array([[0],[0]])
     
     if(verbose):
-        print('Input (u)...')
-        print(u, '\n')
+        print('Input (u_tot)...')
+        print(u_tot, '\n')
         
         print('Starting Reservoir State (x)...')
         print(x, '\n')
@@ -77,7 +82,7 @@ def init(verbose):
         print(W_b2o, '\n')
         print('--------------------------------------------------------')
 
-    return(u, x, W_i2r, W_b2r, W_r2r, W_r2o, W_b2o)
+    return(u_tot, x, W_i2r, W_b2r, W_r2r, W_r2o, W_b2o)
     
 #----------------------------------------------------------------------------    
     
@@ -123,10 +128,6 @@ def readoutPass(x, W_r2o, W_b2o, verbose):
     print(y)    
 
     return(y)    
-    
-    
-    
-    
     
 #----------------------
 main(verbose = True)
