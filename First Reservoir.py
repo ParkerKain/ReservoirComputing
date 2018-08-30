@@ -91,7 +91,7 @@ def reservoirPass(u, x, W_i2r, W_r2r, W_b2r, verbose):
     print('Beginning Reservoir Passthrough ... ')
     #Pass through the reservoir
     oldX = x #Just storing to print if verbose
-    x = (W_r2r.T @ x) + (W_i2r.T @ u) + (W_b2r)
+    x = np.tanh((W_r2r.T @ x) + (W_i2r.T @ u) + (W_b2r))
     
     if(verbose):
         print('Input to Reservoir Part ...')
@@ -103,7 +103,7 @@ def reservoirPass(u, x, W_i2r, W_r2r, W_b2r, verbose):
         print('Bias to Res Part ...')
         print(W_b2r, '\n')
     
-        print('Reservoir Output ...')
+        print('Reservoir Output (after firing)...')
         print(x)
         print('--------------------------------------------------------')
 
