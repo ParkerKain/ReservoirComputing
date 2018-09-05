@@ -11,7 +11,7 @@ def main(verbose = True):
     np.random.seed(10)
     
     #Set hyperparameters
-    epochs = 3
+    epochs = 30
     
     #Initialize Weight matricies, establish inputs
     (u_tot, x, W_i2r, W_b2r, W_r2r, W_r2o, W_b2o) = init(verbose)
@@ -34,7 +34,7 @@ def main(verbose = True):
         #Passthrough Readout
         y = readoutPass(x, W_r2o, W_b2o, verbose)
 
-#----------------------------------------------------------------------------    
+#---------------------------------------------------------------- ------------    
     
 def init(verbose):
 
@@ -132,3 +132,4 @@ def readoutPass(x, W_r2o, W_b2o, verbose):
 #----------------------
 main(verbose = True)
 #----------------------
+ 
