@@ -8,7 +8,12 @@ import numpy as np
 #Define RC Class (numNeurons not implemented)
 class RC:
     def __init__(self, numNeurons, numInputs):
-        """Creates the reservoir, initializing the weights to random numbers."""
+        """Creates the reservoir, initializing the weights to random numbers.
+        
+        numNeurons -- not implemented
+        numInputs -- number of input timesteps (int)
+        
+        """
         
         #Set Initial State
         self.x = np.array([[0],[0]])
@@ -21,7 +26,10 @@ class RC:
         self.W_b2r = np.random.rand(2,1) #Bias to Reservoir
     
     def update(self, u):      
-        """Given a new input, passes said input through the reservoir and returns the new state"""
+        """Given a new input, passes said input through the reservoir and returns the new state
+        
+        u - input pattern from the Input class (returned by getNextU() method), numpy array
+        """
         
         self.x = np.tanh((self.W_r2r.T @ self.x) + (self.W_i2r.T @ u) + (self.W_b2r))
         self.states.append(self.x)
@@ -91,7 +99,10 @@ class RC:
     
 class Readout:
     def __init__(self, numNeurons):
-        """Creates the readout layer, initializing the weights and bias to random numbers"""
+        """Creates the readout layer, initializing the weights and bias to random numbers
+        
+        numNeurons -- not Implemented
+        """
         
         #Set Initial Weights
         self.W_r2o = np.random.rand(2,1) #Reservoir to Output
@@ -99,13 +110,20 @@ class Readout:
         
     def getOutput(self, x):
         """Takes a state from the RC class and returns the 
-        output after passing it through the readout layer"""
+        output after passing it through the readout layer
+        
+        x - states from reservoir (numpy array)
+        """
         
         y = (self.W_r2o.T @ x) + (self.W_b2o)
         return(y)
     
     def updateWeights(self, w, b):
-        """Accepts a new weight matrix and bias and updates these values"""
+        """Accepts a new weight matrix and bias and updates these values
+        
+        w - new weight matrix (numpy array)
+        b - new bias (numpy array)
+        """
         
         self.W_r2o = w
         self.W_b2o = b
@@ -133,7 +151,10 @@ class Readout:
 class Input:
     def __init__(self, numInputs):
         """Initializes input patterns and their correct output, with the inputs generated
-        from the createData() function below"""
+        from the createData() function below
+        
+        numInputs - number of inputs to generate by the createData() function
+        """
         
         (self.u, self.y) = createData(numInputs)            
         self.inputCounter = 0
@@ -151,11 +172,16 @@ class Input:
     def getNext(self):
         """Passes the next input pattern as well as its corresponding expected output
         which can be used to assess accuracy"""
+        
         nextU = self.u[self.inputCounter]
         nextY = self.y[self.inputCounter]
         self.inputCounter += 1
         
         return(np.array([nextU]), np.array([nextY]))
+        
+    def reset(self):
+        """Reset the input counter back to 0, to allow for multiple epochs"""
+        self.inputCounter = 0
     
     def getU(self):
         """Returns all input patterns"""
@@ -176,7 +202,10 @@ class Input:
     
 #----------------------------------------------------------------------------
 def createData(length):
-    """Create binary strings, and a count of if there are more 1's in the last 10 timesteps"""
+    """Create binary strings, and a count of if there are more 1's in the last 10 timesteps
+    
+    length - length of the string to create
+    """
     u = np.random.randint(2, size=length).reshape(length,1)
     y = []
     
@@ -203,6 +232,7 @@ def main(verbose):
     numInputs = 20
     numRCNeurons = 2
     numOutputs = 1
+    epochs = 2
     
     #Create u and y
     print('Creating Data ... ( length =', numInputs, ')\n')
@@ -221,44 +251,55 @@ def main(verbose):
     my_Readout = Readout(numOutputs)
     my_Readout.printReadout()
             
-    #Loop Passes    
-    outputs = []
-    my_RC.clearStates()
-    for i in range(numInputs):
-        nextInput = my_Data.getNextU()
-        currentState = my_RC.update(nextInput)
-        currentOutput = my_Readout.getOutput(currentState)
-        outputs.append(currentOutput[0])
-
+    #Loop Passes 
+    for e in range(epochs):
+        print('----------------------------------------------------')
+        print('Beginning Epoch:', e + 1)
+        
+        #Reset everything
+        outputs = []
+        my_RC.clearStates()
+        my_Data.reset()
+        
+        for i in range(numInputs):
+            nextInput = my_Data.getNextU()
+            currentState = my_RC.update(nextInput)
+            currentOutput = my_Readout.getOutput(currentState)
+            outputs.append(currentOutput[0] )
+    
+            if verbose:
+                print('----------------------------------------------------')
+                print('Timestep:', i, '\n')
+                print('Current Input:\n', nextInput, '\n')
+                print('Current State:\n', currentState,'\n')
+                print('Current Output:\n', currentOutput, '\n')
+                
+        #Assess Accuracy
+        print('----------------------------------------------------')  
+        print('Accuracy:\n')
+        outputs = np.array(outputs)
+        print('My Outputs:\n', outputs, '\n')
+        reshapedCorrect = my_Data.getY().reshape(20,1)
+        print('Correct Output\n',reshapedCorrect, '\n')
+        
+        #Adjust Weight Matrix
+        print('----------------------------------------------------')  
+        my_RC.appendBias()
+        mp = my_RC.getPInv()
+    
         if verbose:
-            print('----------------------------------------------------')
-            print('Timestep:', i, '\n')
-            print('Current Input:\n', nextInput, '\n')
-            print('Current State:\n', currentState,'\n')
-            print('Current Output:\n', currentOutput, '\n')
-            
-    #Assess Accuracy
+            print('All States:\n', my_RC.getAllStates(),'\n')
+            print('Appended:\n', my_RC.appendBias(), '\n')
+            print('Moore Penrose:\n',mp, '\n')
+            print('Outputs:\n', outputs, '\n')
     
+        
+        print('MP * Outputs')
+        mpResults = np.matmul(mp.T, outputs)
+        print(mpResults)
     
-    #Adjust Weight Matrix
-    print('----------------------------------------------------')  
-    my_RC.appendBias()
-    mp = my_RC.getPInv()
-    outputs = np.array(outputs)
-
-    if verbose:
-        print('All States:\n', my_RC.getAllStates(),'\n')
-        print('Appended:\n', my_RC.appendBias(), '\n')
-        print('Moore Penrose:\n',mp, '\n')
-        print('Outputs:\n', outputs, '\n')
-
-    
-    print('MP * Outputs')
-    mpResults = np.matmul(mp.T, outputs)
-    print(mpResults)
-
-    my_Readout.updateWeights(mpResults[0:2,:], mpResults[2,:])
+        my_Readout.updateWeights(mpResults[0:2,:], mpResults[2,:])
     
 #----------------------------------------------------------------------------
     
-main(verbose = True)
+main(verbose = False)
