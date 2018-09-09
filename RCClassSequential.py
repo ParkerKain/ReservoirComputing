@@ -21,9 +21,9 @@ class RC:
         self.numInputs = numInputs
         
         #Set Weights and Biases (random)
-        self.W_i2r = np.random.rand(1,2) #Input to Reservoir
-        self.W_r2r = np.random.rand(2,2) #Reservoir to Reservoir
-        self.W_b2r = np.random.rand(2,1) #Bias to Reservoir
+        self.W_i2r = np.random.rand(1,2) * 2 - 1 #Input to Reservoir
+        self.W_r2r = np.random.rand(2,2) * 2 - 1 #Reservoir to Reservoir
+        self.W_b2r = np.random.rand(2,1) * 2 - 1 #Bias to Reservoir
     
     def update(self, u):      
         """Given a new input, passes said input through the reservoir and returns the new state
@@ -98,15 +98,19 @@ class RC:
 #----------------------------------------------------------------------------    
     
 class Readout:
-    def __init__(self, numNeurons):
+    def __init__(self, numNeurons, numInputs):
         """Creates the readout layer, initializing the weights and bias to random numbers
         
         numNeurons -- not Implemented
         """
         
         #Set Initial Weights
-        self.W_r2o = np.random.rand(2,1) #Reservoir to Output
-        self.W_b2o = np.random.rand(1,1) #Output to Reservoir
+        self.W_r2o = np.random.rand(2,1) * 2 - 1 #Reservoir to Output
+        self.W_b2o = np.random.rand(1,1) * 2 - 1 #Output to Reservoir
+        
+        #Set some storage for outputs
+        self.outputs = []
+        self.numInputs = numInputs
         
     def getOutput(self, x):
         """Takes a state from the RC class and returns the 
@@ -116,6 +120,7 @@ class Readout:
         """
         
         y = (self.W_r2o.T @ x) + (self.W_b2o)
+        self.outputs.append(y)
         return(y)
     
     def updateWeights(self, w, b):
@@ -124,9 +129,9 @@ class Readout:
         w - new weight matrix (numpy array)
         b - new bias (numpy array)
         """
-        
+
         self.W_r2o = w
-        self.W_b2o = b
+        self.W_b2o = b        
         
     def getR2O(self):
         """Returns the current reservoir to output weight matrix"""
@@ -137,6 +142,15 @@ class Readout:
         """Returns the current bias to the output"""
         
         return(self.W_b2o)
+    
+    def getAllOutputs(self):
+        """Returns all appended outputs"""
+        
+        return(np.array(self.outputs).reshape(self.numInputs,1))
+    
+    def clearReadout(self):
+        """Clear out output list"""
+        self.outputs = []
         
     def printReadout(self):
         """Prints all weights and biases related to the readout layer"""
@@ -156,7 +170,7 @@ class Input:
         numInputs - number of inputs to generate by the createData() function
         """
         
-        (self.u, self.y) = createData(numInputs)            
+        self.createData(numInputs)            
         self.inputCounter = 0
         self.numInputs = numInputs
         
@@ -182,6 +196,27 @@ class Input:
     def reset(self):
         """Reset the input counter back to 0, to allow for multiple epochs"""
         self.inputCounter = 0
+        
+    def createData(self, length):
+        """Create binary strings, and a count of if there are more 1's in the last 10 timesteps
+        
+        length - length of the string to create
+        """
+        u = np.random.randint(2, size=length).reshape(length,1)
+        y = []
+        
+        for i in range(length):
+            if i < 10:
+                num1 = sum(u[0:i+1])
+                num0 = (i+1) - num1
+                y.append(int(num1 >= num0))
+            else:
+                num1 = sum(u[i-9:i+1])
+                num0 = 10 - num1
+                y.append(int(num1 > num0))
+        
+        self.u = u
+        self.y = np.array(y)
     
     def getU(self):
         """Returns all input patterns"""
@@ -191,7 +226,7 @@ class Input:
         """Returns all expected outputs"""
         return(self.y)
     
-    def getLast5(self):
+    def printLast5(self):
         """Returns the last five inputs and outputs, which is used as a demo to see the data"""
         
         print('Last 5 inputs and outputs ...')
@@ -199,28 +234,7 @@ class Input:
         for i in range(5):
             print('Input:\n', self.u[self.numInputs-i-10 : self.numInputs-i].reshape(1, 10))
             print('Output:', self.y[self.numInputs-i-1], '\n')
-    
-#----------------------------------------------------------------------------
-def createData(length):
-    """Create binary strings, and a count of if there are more 1's in the last 10 timesteps
-    
-    length - length of the string to create
-    """
-    u = np.random.randint(2, size=length).reshape(length,1)
-    y = []
-    
-    for i in range(length):
-        if i < 10:
-            num1 = sum(u[0:i+1])
-            num0 = (i+1) - num1
-            y.append(int(num1 >= num0))
-        else:
-            num1 = sum(u[i-9:i+1])
-            num0 = 10 - num1
-            y.append(int(num1 > num0))
-    
-    return(u, np.array(y))
-
+            
 #----------------------------------------------------------------------------
 def main(verbose):
     """Creates and trains a neural net with a reservoir to learn simple binary pattern 
@@ -229,15 +243,15 @@ def main(verbose):
     np.random.seed(10)
     
     #Set hyperparameters
-    numInputs = 20
+    numInputs = 1000
     numRCNeurons = 2
     numOutputs = 1
-    epochs = 2
+    epochs = 3
     
     #Create u and y
     print('Creating Data ... ( length =', numInputs, ')\n')
     my_Data = Input(numInputs)
-    my_Data.getLast5()
+    my_Data.printLast5()
     
     #Create reservoir
     print('----------------------------------------------------')
@@ -248,7 +262,7 @@ def main(verbose):
     #Create Readout
     print('----------------------------------------------------')
     print('Creating Readout ... ( Outputs:',numOutputs,')\n')
-    my_Readout = Readout(numOutputs)
+    my_Readout = Readout(numOutputs, numInputs)
     my_Readout.printReadout()
             
     #Loop Passes 
@@ -260,12 +274,13 @@ def main(verbose):
         outputs = []
         my_RC.clearStates()
         my_Data.reset()
+        my_Readout.clearReadout()
         
         for i in range(numInputs):
             nextInput = my_Data.getNextU()
             currentState = my_RC.update(nextInput)
             currentOutput = my_Readout.getOutput(currentState)
-            outputs.append(currentOutput[0] )
+            outputs.append(currentOutput[0])
     
             if verbose:
                 print('----------------------------------------------------')
@@ -276,29 +291,26 @@ def main(verbose):
                 
         #Assess Accuracy
         print('----------------------------------------------------')  
-        print('Accuracy:\n')
-        outputs = np.array(outputs)
-        print('My Outputs:\n', outputs, '\n')
-        reshapedCorrect = my_Data.getY().reshape(20,1)
-        print('Correct Output\n',reshapedCorrect, '\n')
+        #print('Accuracy:\n')
+        outputs = my_Readout.getAllOutputs()
+        #print('My Outputs (Rounded):\n', np.round(outputs,0), '\n')
+        reshapedCorrect = my_Data.getY().reshape(numInputs,1)
+        #print('Correct Output\n',reshapedCorrect, '\n')
+        
+        print(((np.round(outputs,0) - reshapedCorrect) ** 2).mean(0))
         
         #Adjust Weight Matrix
-        print('----------------------------------------------------')  
-        my_RC.appendBias()
-        mp = my_RC.getPInv()
-    
+        print('----------------------------------------------------') 
+        
+        appended = my_RC.appendBias()
+        new_weights = np.linalg.lstsq(appended, reshapedCorrect, rcond = None)[0]
+ 
         if verbose:
             print('All States:\n', my_RC.getAllStates(),'\n')
             print('Appended:\n', my_RC.appendBias(), '\n')
-            print('Moore Penrose:\n',mp, '\n')
             print('Outputs:\n', outputs, '\n')
     
-        
-        print('MP * Outputs')
-        mpResults = np.matmul(mp.T, outputs)
-        print(mpResults)
-    
-        my_Readout.updateWeights(mpResults[0:2,:], mpResults[2,:])
+        my_Readout.updateWeights(np.array([new_weights[0], new_weights[1]]), new_weights[2])
     
 #----------------------------------------------------------------------------
     
