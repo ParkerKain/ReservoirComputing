@@ -44,10 +44,10 @@ class Input:
         predicted - numpy array of predicted outputs from Readout.getOutput()
         """
     
-        reshapedCorrect = self.y.reshape(self.numInputs,1)        
-        return(((np.round(predicted,0) - reshapedCorrect) ** 2).mean(0))
+        reshapedCorrect = self.y.reshape(self.numInputs,1) 
+        mse = ((np.round(predicted,0) - reshapedCorrect) ** 2).mean(0)
+        return(mse)
         
-    
     def reset(self):
         """Reset the input counter back to 0, to allow for multiple epochs"""
         self.inputCounter = 0
@@ -106,14 +106,15 @@ class RC:
         """
         
         #Set Initial State
-        self.x = np.array([[0],[0]])
+        self.numNeurons = numNeurons
+        self.x = np.zeros((self.numNeurons,1))
         self.states = []
         self.numInputs = numInputs
         
         #Set Weights and Biases (random)
-        self.W_i2r = np.random.rand(1,2) * 2 - 1 #Input to Reservoir
-        self.W_r2r = np.random.rand(2,2) * 2 - 1 #Reservoir to Reservoir
-        self.W_b2r = np.random.rand(2,1) * 2 - 1 #Bias to Reservoir
+        self.W_i2r = np.random.rand(1,self.numNeurons) * 2 - 1 #Input to Reservoir
+        self.W_r2r = np.random.rand(self.numNeurons,self.numNeurons) * 2 - 1 #Reservoir to Reservoir
+        self.W_b2r = np.random.rand(self.numNeurons,1) * 2 - 1 #Bias to Reservoir
     
     def update(self, u):      
         """Given a new input, passes said input through the reservoir and returns the new state
@@ -136,6 +137,9 @@ class RC:
     def printRC(self):
         """Prints current weights of the reservoir, which do not change"""
         
+        print('Current State ...')
+        print(self.x, '\n')
+        
         print('Current Input to Reservoir Weights ... ')
         print(self.W_i2r, '\n')
         
@@ -150,7 +154,7 @@ class RC:
             well as the reservoir to reservoir weights"""
             
         self.states = []
-        self.x = np.array([[0],[0]])
+        self.x = np.zeros((self.numNeurons,1))
         
         
     def getPInv(self):
@@ -168,7 +172,7 @@ class RC:
     def getAllStates(self):
         """Returns all states so far for the current epoch"""
         
-        return(np.array(self.states).reshape(self.numInputs,2))
+        return(np.array(self.states).reshape(self.numInputs, self.numNeurons))
 
     def getI2R(self):
         """Returns the input to reservoir weight matrix"""
@@ -188,19 +192,20 @@ class RC:
 #----------------------------------------------------------------------------    
     
 class Readout:
-    def __init__(self, numNeurons, numInputs):
+    def __init__(self, numNeurons, numTimesteps):
         """Creates the readout layer, initializing the weights and bias to random numbers
         
         numNeurons -- not Implemented
         """
         
         #Set Initial Weights
-        self.W_r2o = np.random.rand(2,1) * 2 - 1 #Reservoir to Output
-        self.W_b2o = np.random.rand(1,1) * 2 - 1 #Output to Reservoir
+        self.numNeurons = numNeurons
+        self.W_r2o = np.random.rand(numNeurons, 1) * 2 - 1 #Reservoir to Output
+        self.W_b2o = np.random.rand(1, 1) * 2 - 1 #Output to Reservoir
         
         #Set some storage for outputs
         self.outputs = []
-        self.numInputs = numInputs
+        self.numTimesteps = numTimesteps
         
     def getOutput(self, x):
         """Takes a state from the RC class and returns the 
@@ -236,7 +241,7 @@ class Readout:
     def getAllOutputs(self):
         """Returns all appended outputs"""
         
-        return(np.array(self.outputs).reshape(self.numInputs,1))
+        return(np.array(self.outputs).reshape(self.numTimesteps,1))
     
     def clearReadout(self):
         """Clear out output list"""
@@ -260,8 +265,8 @@ def main(verbose):
     np.random.seed(10)
     
     #Set hyperparameters
-    numInputs = 1000
-    numRCNeurons = 2
+    numInputs = 25
+    numRCNeurons = 10
     numOutputs = 1
     epochs = 3
     
@@ -279,7 +284,7 @@ def main(verbose):
     #Create Readout
     print('----------------------------------------------------')
     print('Creating Readout ... ( Outputs:',numOutputs,')\n')
-    my_Readout = Readout(numOutputs, numInputs)
+    my_Readout = Readout(numRCNeurons, numInputs)
     my_Readout.printReadout()
             
     #Loop Passes 
@@ -314,18 +319,21 @@ def main(verbose):
         mse = my_Data.assessAccuracy(outputs)
         print('Mean Squared Error:', mse)
 
+        print('First 20 Expected:\n',my_Data.getY()[0:20])
+        print('First 20 Actual:\n',np.round(outputs,0).astype(int)[0:20].reshape(1,20))
+
         #Adjust Weight Matrix
         print('----------------------------------------------------') 
         
         appended = my_RC.appendBias()
         new_weights = np.linalg.lstsq(appended, my_Data.getReshapedY(), rcond = None)[0]
- 
+    
         if verbose:
             print('All States:\n', my_RC.getAllStates(),'\n')
             print('Appended:\n', my_RC.appendBias(), '\n')
             print('Outputs:\n', outputs, '\n')
     
-        my_Readout.updateWeights(np.array([new_weights[0], new_weights[1]]), new_weights[2])
+        my_Readout.updateWeights(np.array([new_weights[0:numRCNeurons]]).reshape(numRCNeurons, 1), new_weights[numRCNeurons])
     
 #----------------------------------------------------------------------------
     
