@@ -11,7 +11,7 @@ def main(verbose = True):
     np.random.seed(10)
     
     #Set hyperparameters
-    epochs = 30
+    epochs = 3
     
     #Initialize Weight matricies, establish inputs
     (u_tot, x, W_i2r, W_b2r, W_r2r, W_r2o, W_b2o) = init(verbose)
