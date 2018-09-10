@@ -5,6 +5,96 @@
 import numpy as np
 
 #----------------------------------------------------------------------------
+
+class Input:
+    def __init__(self, numInputs):
+        """Initializes input patterns and their correct output, with the inputs generated
+        from the createData() function below
+        
+        numInputs - number of inputs to generate by the createData() function
+        """
+        
+        self.createData(numInputs)            
+        self.inputCounter = 0
+        self.numInputs = numInputs
+        
+    def getNextU(self):
+        """Passes the next input pattern, which will be used to pass one pattern at a time
+        to the reservoir"""
+        
+        nextU = self.u[self.inputCounter]
+        self.inputCounter += 1
+        
+        return(np.array([nextU])) 
+        
+    def getNext(self):
+        """Passes the next input pattern as well as its corresponding expected output
+        which can be used to assess accuracy"""
+        
+        nextU = self.u[self.inputCounter]
+        nextY = self.y[self.inputCounter]
+        self.inputCounter += 1
+        
+        return(np.array([nextU]), np.array([nextY]))
+        
+    def assessAccuracy(self, predicted):
+        """Takes the predicted outputs from the Readout class and compared them to 
+        the known outputs
+        
+        predicted - numpy array of predicted outputs from Readout.getOutput()
+        """
+    
+        reshapedCorrect = self.y.reshape(self.numInputs,1)        
+        return(((np.round(predicted,0) - reshapedCorrect) ** 2).mean(0))
+        
+    
+    def reset(self):
+        """Reset the input counter back to 0, to allow for multiple epochs"""
+        self.inputCounter = 0
+        
+    def createData(self, length):
+        """Create binary strings, and a count of if there are more 1's in the last 10 timesteps
+        
+        length - length of the string to create
+        """
+        u = np.random.randint(2, size=length).reshape(length,1)
+        y = []
+        
+        for i in range(length):
+            if i < 10:
+                num1 = sum(u[0:i+1])
+                num0 = (i+1) - num1
+                y.append(int(num1 >= num0))
+            else:
+                num1 = sum(u[i-9:i+1])
+                num0 = 10 - num1
+                y.append(int(num1 > num0))
+        
+        self.u = u
+        self.y = np.array(y)
+    
+    def getU(self):
+        """Returns all input patterns"""
+        return(self.u)
+    
+    def getY(self):
+        """Returns all expected outputs"""
+        return(self.y)
+    
+    def getReshapedY(self):
+        """Returns y transposed, as linalg.lstsq() requires it"""
+        return(self.y.reshape(self.numInputs,1) )
+    
+    def printLast5(self):
+        """Returns the last five inputs and outputs, which is used as a demo to see the data"""
+        
+        print('Last 5 inputs and outputs ...')
+    
+        for i in range(5):
+            print('Input:\n', self.u[self.numInputs-i-10 : self.numInputs-i].reshape(1, 10))
+            print('Output:', self.y[self.numInputs-i-1], '\n')
+
+#----------------------------------------------------------------------------
 #Define RC Class (numNeurons not implemented)
 class RC:
     def __init__(self, numNeurons, numInputs):
@@ -162,80 +252,7 @@ class Readout:
         print(self.W_b2o, '\n')
         
 #----------------------------------------------------------------------------
-class Input:
-    def __init__(self, numInputs):
-        """Initializes input patterns and their correct output, with the inputs generated
-        from the createData() function below
-        
-        numInputs - number of inputs to generate by the createData() function
-        """
-        
-        self.createData(numInputs)            
-        self.inputCounter = 0
-        self.numInputs = numInputs
-        
-    def getNextU(self):
-        """Passes the next input pattern, which will be used to pass one pattern at a time
-        to the reservoir"""
-        
-        nextU = self.u[self.inputCounter]
-        self.inputCounter += 1
-        
-        return(np.array([nextU])) 
-        
-    def getNext(self):
-        """Passes the next input pattern as well as its corresponding expected output
-        which can be used to assess accuracy"""
-        
-        nextU = self.u[self.inputCounter]
-        nextY = self.y[self.inputCounter]
-        self.inputCounter += 1
-        
-        return(np.array([nextU]), np.array([nextY]))
-        
-    def reset(self):
-        """Reset the input counter back to 0, to allow for multiple epochs"""
-        self.inputCounter = 0
-        
-    def createData(self, length):
-        """Create binary strings, and a count of if there are more 1's in the last 10 timesteps
-        
-        length - length of the string to create
-        """
-        u = np.random.randint(2, size=length).reshape(length,1)
-        y = []
-        
-        for i in range(length):
-            if i < 10:
-                num1 = sum(u[0:i+1])
-                num0 = (i+1) - num1
-                y.append(int(num1 >= num0))
-            else:
-                num1 = sum(u[i-9:i+1])
-                num0 = 10 - num1
-                y.append(int(num1 > num0))
-        
-        self.u = u
-        self.y = np.array(y)
-    
-    def getU(self):
-        """Returns all input patterns"""
-        return(self.u)
-    
-    def getY(self):
-        """Returns all expected outputs"""
-        return(self.y)
-    
-    def printLast5(self):
-        """Returns the last five inputs and outputs, which is used as a demo to see the data"""
-        
-        print('Last 5 inputs and outputs ...')
-    
-        for i in range(5):
-            print('Input:\n', self.u[self.numInputs-i-10 : self.numInputs-i].reshape(1, 10))
-            print('Output:', self.y[self.numInputs-i-1], '\n')
-            
-#----------------------------------------------------------------------------
+
 def main(verbose):
     """Creates and trains a neural net with a reservoir to learn simple binary pattern 
     recognition over time"""
@@ -291,19 +308,17 @@ def main(verbose):
                 
         #Assess Accuracy
         print('----------------------------------------------------')  
-        #print('Accuracy:\n')
+        print('Accuracy:\n')
+
         outputs = my_Readout.getAllOutputs()
-        #print('My Outputs (Rounded):\n', np.round(outputs,0), '\n')
-        reshapedCorrect = my_Data.getY().reshape(numInputs,1)
-        #print('Correct Output\n',reshapedCorrect, '\n')
-        
-        print(((np.round(outputs,0) - reshapedCorrect) ** 2).mean(0))
-        
+        mse = my_Data.assessAccuracy(outputs)
+        print('Mean Squared Error:', mse)
+
         #Adjust Weight Matrix
         print('----------------------------------------------------') 
         
         appended = my_RC.appendBias()
-        new_weights = np.linalg.lstsq(appended, reshapedCorrect, rcond = None)[0]
+        new_weights = np.linalg.lstsq(appended, my_Data.getReshapedY(), rcond = None)[0]
  
         if verbose:
             print('All States:\n', my_RC.getAllStates(),'\n')
