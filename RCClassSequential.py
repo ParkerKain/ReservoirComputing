@@ -7,18 +7,18 @@ import numpy as np
 #----------------------------------------------------------------------------
 
 class Input:
-    def __init__(self, numInputs):
+    def __init__(self, numInputs, problem):
         """Initializes input patterns and their correct output, with the inputs generated
         from the createData() function below
         
         numInputs - number of inputs to generate by the createData() function
         """
         
-        self.createData(numInputs)            
+        self.createData(numInputs, problem)            
         self.inputCounter = 0
         self.numInputs = numInputs
         
-    def getNextU(self):
+    def nextU(self):
         """Passes the next input pattern, which will be used to pass one pattern at a time
         to the reservoir"""
         
@@ -52,7 +52,7 @@ class Input:
         """Reset the input counter back to 0, to allow for multiple epochs"""
         self.inputCounter = 0
         
-    def createData(self, length):
+    def createData(self, length, problem):
         """Create binary strings, and a count of if there are more 1's in the last 10 timesteps
         
         length - length of the string to create
@@ -80,6 +80,10 @@ class Input:
     def getY(self):
         """Returns all expected outputs"""
         return(self.y)
+        
+    def getNumInputs(self):
+        """Returns the number of timesteps in the training pattern"""
+        return(self.numInputs)
     
     def getReshapedY(self):
         """Returns y transposed, as linalg.lstsq() requires it"""
@@ -119,7 +123,7 @@ class RC:
     def update(self, u):      
         """Given a new input, passes said input through the reservoir and returns the new state
         
-        u - input pattern from the Input class (returned by getNextU() method), numpy array
+        u - input pattern from the Input class (returned by nextU() method), numpy array
         """
         
         self.x = np.tanh((self.W_r2r.T @ self.x) + (self.W_i2r.T @ u) + (self.W_b2r))
@@ -188,6 +192,10 @@ class RC:
         """Returns the bias to reservoir weight matrix"""
         
         return(self.W_b2r)
+        
+    def getNumNeurons(self):
+        """Returns the number of neurons in the reservoir """
+        return(self.numNeurons)
     
 #----------------------------------------------------------------------------    
     
@@ -257,36 +265,11 @@ class Readout:
         print(self.W_b2o, '\n')
         
 #----------------------------------------------------------------------------
-
-def main(verbose):
-    """Creates and trains a neural net with a reservoir to learn simple binary pattern 
-    recognition over time"""
-    #Set seed
-    np.random.seed(10)
     
-    #Set hyperparameters
-    numInputs = 25
-    numRCNeurons = 10
-    numOutputs = 1
-    epochs = 3
+def batchLearn(my_Data, my_RC, my_Readout, epochs, verbose):
+    """Learns a defined problem using batch learning, rather than online learning
+    Will run through the entire training set, and the weights to it"""
     
-    #Create u and y
-    print('Creating Data ... ( length =', numInputs, ')\n')
-    my_Data = Input(numInputs)
-    my_Data.printLast5()
-    
-    #Create reservoir
-    print('----------------------------------------------------')
-    print('Creating Reservoir ... ( Neurons:', numRCNeurons,')\n')
-    my_RC = RC(numRCNeurons, numInputs)
-    my_RC.printRC()
-
-    #Create Readout
-    print('----------------------------------------------------')
-    print('Creating Readout ... ( Outputs:',numOutputs,')\n')
-    my_Readout = Readout(numRCNeurons, numInputs)
-    my_Readout.printReadout()
-            
     #Loop Passes 
     for e in range(epochs):
         print('----------------------------------------------------')
@@ -298,8 +281,8 @@ def main(verbose):
         my_Data.reset()
         my_Readout.clearReadout()
         
-        for i in range(numInputs):
-            nextInput = my_Data.getNextU()
+        for i in range(my_Data.getNumInputs()):
+            nextInput = my_Data.nextU()
             currentState = my_RC.update(nextInput)
             currentOutput = my_Readout.getOutput(currentState)
             outputs.append(currentOutput[0])
@@ -333,8 +316,55 @@ def main(verbose):
             print('Appended:\n', my_RC.appendBias(), '\n')
             print('Outputs:\n', outputs, '\n')
     
-        my_Readout.updateWeights(np.array([new_weights[0:numRCNeurons]]).reshape(numRCNeurons, 1), new_weights[numRCNeurons])
+        my_Readout.updateWeights(np.array([new_weights[0:my_RC.getNumNeurons()]]).reshape(my_RC.getNumNeurons(), 1), new_weights[my_RC.getNumNeurons()])
+
+def main(verbose):
+    """Creates and trains a neural net with a reservoir to 
+    learn simple binary pattern recognition over time"""
     
+    #Set seed
+    np.random.seed(10)
+    
+    #Set hyperparameters
+    problem = 'heaviness' #NOT IMPLEMENTED
+    learning = 'batch'    #NOT IMPLEMENTED
+    numInputs = 20
+    numRCNeurons = 5
+    numOutputs = 1
+    epochs = 2
+    
+    #Create u and y
+    print('Creating Data ... ( length =', numInputs, ')\n')
+    my_Data = Input(numInputs, problem)
+    my_Data.printLast5()
+    
+    #Create reservoir
+    print('----------------------------------------------------')
+    print('Creating Reservoir ... ( Neurons:', numRCNeurons,')\n')
+    my_RC = RC(numRCNeurons, numInputs)
+    my_RC.printRC()
+
+    #Create Readout
+    print('----------------------------------------------------')
+    print('Creating Readout ... ( Outputs:',numOutputs,')\n')
+    my_Readout = Readout(numRCNeurons, numInputs)
+    my_Readout.printReadout()
+    
+    
+    batchLearn(my_Data, my_RC, my_Readout, epochs, verbose)
 #----------------------------------------------------------------------------
     
 main(verbose = False)
+
+
+#Put in a new pattern, ** 
+#Extend the original pattern and see how it learns **
+
+# Three tasks:
+# "Heaviness task" **
+# Label with sequence (robot clamping)
+# Parity
+
+
+#Online learning.
+#Training online with gradient descent, see paper. to be used with label to sequence. 
