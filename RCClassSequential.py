@@ -14,6 +14,7 @@ class Input:
         numInputs - number of inputs to generate by the createData() function
         """
         
+        self.problem = problem
         self.createData(numInputs, problem)            
         self.inputCounter = 0
         self.numInputs = numInputs
@@ -45,8 +46,20 @@ class Input:
         """
     
         reshapedCorrect = self.y.reshape(self.numInputs,1) 
-        mse = ((np.round(predicted,0) - reshapedCorrect) ** 2).mean(0)
-        return(mse)
+        mse = np.round(((predicted - reshapedCorrect) ** 2).mean(0),4)
+        
+        boundedPredicted = []
+        for i in np.nditer(predicted):
+            if i >= 0.5:
+                boundedPredicted.append(1)
+            else:
+                boundedPredicted.append(0)
+        boundedPredicted = np.array(boundedPredicted).reshape(self.numInputs, 1)
+
+        (unique, counts) = np.unique(boundedPredicted - reshapedCorrect, return_counts = True) 
+        dictCounts = dict(zip(unique,counts))
+        
+        return(mse, round(dictCounts.get(0) / self.numInputs, 4))
         
     def reset(self):
         """Reset the input counter back to 0, to allow for multiple epochs"""
@@ -88,6 +101,10 @@ class Input:
     def getReshapedY(self):
         """Returns y transposed, as linalg.lstsq() requires it"""
         return(self.y.reshape(self.numInputs,1) )
+        
+    def getProblem(self):
+        """Returns the problem the data was generated from"""
+        return(self.problem)
     
     def printLast5(self):
         """Returns the last five inputs and outputs, which is used as a demo to see the data"""
@@ -130,13 +147,21 @@ class RC:
         self.states.append(self.x)
         return(self.x)
     
-    def appendBias(self):
+    def appendBiasBatch(self):
         """To be used after all timesteps have been passes, appends a column of 1's 
         to represent the bias for the Moore Penrose pseudo inverse"""
         
         ones = np.array([1 for i in range(self.numInputs)]).reshape(self.numInputs, 1)
         self.appendedStates = np.append(self.getAllStates(), ones, axis = 1)
         return(self.appendedStates)
+        
+    def appendBiasOnline(self):
+        """To be used after each timestep has been passed, appends a single 1 to represent
+        the bias."""
+        
+        one = np.array([[1]])
+        self.appendedState = np.append(self.getCurrentState(), one, axis = 0)
+        return(self.appendedState)
         
     def printRC(self):
         """Prints current weights of the reservoir, which do not change"""
@@ -159,7 +184,6 @@ class RC:
             
         self.states = []
         self.x = np.zeros((self.numNeurons,1))
-        
         
     def getPInv(self):
         """Calculates the Moore Penrose Pseudo Inverse for the concatenated and appended 
@@ -200,7 +224,7 @@ class RC:
 #----------------------------------------------------------------------------    
     
 class Readout:
-    def __init__(self, numNeurons, numTimesteps):
+    def __init__(self, numNeurons, numTimesteps, epsilon):
         """Creates the readout layer, initializing the weights and bias to random numbers
         
         numNeurons -- not Implemented
@@ -214,6 +238,9 @@ class Readout:
         #Set some storage for outputs
         self.outputs = []
         self.numTimesteps = numTimesteps
+    
+        #Set learning rate (for online)
+        self.epsilon = epsilon
         
     def getOutput(self, x):
         """Takes a state from the RC class and returns the 
@@ -236,6 +263,17 @@ class Readout:
         self.W_r2o = w
         self.W_b2o = b        
         
+    def gradientUpdate(self, w, b):
+        """Updates the Readout layer weights and bias by a factor of the gradient
+        
+        w - change to weight matrix (numpy array)
+        b - change to bias (number)
+        """
+        
+        self.W_r2o -= self.epsilon * w
+        self.W_b2o -= self.epsilon * b
+        
+    
     def getR2O(self):
         """Returns the current reservoir to output weight matrix"""
         
@@ -265,13 +303,46 @@ class Readout:
         print(self.W_b2o, '\n')
         
 #----------------------------------------------------------------------------
+        
+def boundOutput(currentOutput):
+    """Takes output from the readout layer, and bounds it to either 0 or 1"""
+    if currentOutput >= 0.5:
+        currentOutput = np.array([[1]])
+    else:
+        currentOutput = np.array([[0]])
+    return(currentOutput)
+        
+#----------------------------------------------------------------------------
+def testLearn(numInputs, problem, my_RC, my_Data, my_Readout):    
+
+    #Test Learning
+    my_Test_Data = Input(numInputs, problem)
+    
+    outputs = []
+    my_RC.clearStates()
+    my_Data.reset()
+    my_Readout.clearReadout()
+    
+    for i in range(my_Data.getNumInputs()):
+        nextInput = my_Test_Data.nextU()
+        currentState = my_RC.update(nextInput)
+        currentOutput = my_Readout.getOutput(currentState)
+        outputs.append(currentOutput[0])
+        
+    outputs = my_Readout.getAllOutputs()
+    (mse, count) = my_Test_Data.assessAccuracy(outputs)
+    
+    print('Testing MSE:', mse)
+    print('Testing Percent Correct:', count)
+    
+# -------------------------------------------------------------------------
     
 def batchLearn(my_Data, my_RC, my_Readout, epochs, verbose):
     """Learns a defined problem using batch learning, rather than online learning
     Will run through the entire training set, and the weights to it"""
     
     #Loop Passes 
-    for e in range(epochs):
+    for e in range(2):
         print('----------------------------------------------------')
         print('Beginning Epoch:', e + 1)
         
@@ -299,8 +370,10 @@ def batchLearn(my_Data, my_RC, my_Readout, epochs, verbose):
         print('Accuracy:\n')
 
         outputs = my_Readout.getAllOutputs()
-        mse = my_Data.assessAccuracy(outputs)
-        print('Mean Squared Error:', mse)
+        (mse, count) = my_Data.assessAccuracy(outputs)
+        print('Training Mean Squared Error:', mse)
+        print('Training Percent Correct:', count)
+
 
         print('First 20 Expected:\n',my_Data.getY()[0:20])
         print('First 20 Actual:\n',np.round(outputs,0).astype(int)[0:20].reshape(1,20))
@@ -308,15 +381,71 @@ def batchLearn(my_Data, my_RC, my_Readout, epochs, verbose):
         #Adjust Weight Matrix
         print('----------------------------------------------------') 
         
-        appended = my_RC.appendBias()
+        appended = my_RC.appendBiasBatch()
         new_weights = np.linalg.lstsq(appended, my_Data.getReshapedY(), rcond = None)[0]
     
         if verbose:
             print('All States:\n', my_RC.getAllStates(),'\n')
-            print('Appended:\n', my_RC.appendBias(), '\n')
+            print('Appended:\n', my_RC.appendBiasBatch(), '\n')
             print('Outputs:\n', outputs, '\n')
     
         my_Readout.updateWeights(np.array([new_weights[0:my_RC.getNumNeurons()]]).reshape(my_RC.getNumNeurons(), 1), new_weights[my_RC.getNumNeurons()])
+    
+    return(my_Readout)
+#----------------------------------------------------------------------------
+
+def onlineLearn(my_Data, my_RC, my_Readout, epochs, verbose, bound):
+    """Learns a defined problem by adjusting the weights of the readout layer
+    after each individual timestep"""
+
+    for e in range(epochs):
+        print('----------------------------------------------------')
+        print('Beginning Epoch:', e + 1)
+        
+        #Clear all the output streams and reservoir
+        outputs = []
+        my_RC.clearStates()
+        my_Data.reset()
+        my_Readout.clearReadout()
+        
+        for i in range(my_Data.getNumInputs()):
+            
+            #Grab next timestep
+            (nextInput, nextOutput) = my_Data.getNext()
+            
+            #Pass through network
+            currentState = my_RC.update(nextInput)
+            currentOutput = my_Readout.getOutput(currentState)
+            
+            #Bound output between 0 and 1, if wanted
+            if bound:
+                currentOutput = boundOutput(currentOutput)
+            
+            outputs.append(currentOutput[0])
+            
+            #Calculate error and gradient
+            error = currentOutput - nextOutput   
+            appendedState = my_RC.appendBiasOnline()
+            gradient = error * appendedState
+            
+            #Make updates
+            w = gradient[0:my_RC.getNumNeurons(),:]
+            b = gradient[my_RC.getNumNeurons(),:]
+            my_Readout.gradientUpdate(w, b)
+        
+        #Assess Accuracy
+        outputs = my_Readout.getAllOutputs()
+        (mse, count) = my_Data.assessAccuracy(outputs)
+        print('Training MSE:', mse)
+        print('Training Percent Correct:', count)
+
+        
+        #Test accuracy on new data
+        testLearn(my_Data.getNumInputs(), my_Data.getProblem(), my_RC, my_Data, my_Readout)
+
+
+    return(my_Readout)
+#----------------------------------------------------------------------------
 
 def main(verbose):
     """Creates and trains a neural net with a reservoir to 
@@ -327,11 +456,15 @@ def main(verbose):
     
     #Set hyperparameters
     problem = 'heaviness' #NOT IMPLEMENTED
-    learning = 'batch'    #NOT IMPLEMENTED
-    numInputs = 20
+    numInputs = 100
     numRCNeurons = 5
     numOutputs = 1
-    epochs = 2
+    batch = True
+    #These only apply to online learning
+    learningRate = 0.0001
+    epochs = 1000
+    bound = False
+
     
     #Create u and y
     print('Creating Data ... ( length =', numInputs, ')\n')
@@ -347,18 +480,25 @@ def main(verbose):
     #Create Readout
     print('----------------------------------------------------')
     print('Creating Readout ... ( Outputs:',numOutputs,')\n')
-    my_Readout = Readout(numRCNeurons, numInputs)
+    my_Readout = Readout(numRCNeurons, numInputs, learningRate)
     my_Readout.printReadout()
     
     
-    batchLearn(my_Data, my_RC, my_Readout, epochs, verbose)
+    if batch:
+        #Batch Learn
+        my_Readout = batchLearn(my_Data, my_RC, my_Readout, epochs, verbose)
+        testLearn(numInputs, problem, my_RC, my_Data, my_Readout)
+    else:
+        #Online Learn
+        my_Readout = onlineLearn(my_Data, my_RC, my_Readout, epochs, verbose, bound)
+    
 #----------------------------------------------------------------------------
     
 main(verbose = False)
 
 
-#Put in a new pattern, ** 
-#Extend the original pattern and see how it learns **
+#Put in a new pattern ** (Works! Sweet spot for timestep to RC neuron ratio around 40/1)
+#Extend the original pattern and see how it learns ** (Concerns about measureing accuracy and overfitting)
 
 # Three tasks:
 # "Heaviness task" **
