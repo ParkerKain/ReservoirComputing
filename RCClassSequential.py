@@ -456,14 +456,15 @@ def main(verbose):
     
     #Set hyperparameters
     problem = 'heaviness' #NOT IMPLEMENTED
-    numInputs = 100
-    numRCNeurons = 5
+    numInputs = 20
+    numRCNeurons = 2
     numOutputs = 1
     batch = True
     #These only apply to online learning
     learningRate = 0.0001
-    epochs = 1000
-    bound = False
+    momentum = 0
+    epochs = 500
+    bound = True
 
     
     #Create u and y
@@ -505,6 +506,7 @@ main(verbose = False)
 # Label with sequence (robot clamping)
 # Parity
 
+#Recursive least squares?
 
 #Online learning.
 #Training online with gradient descent, see paper. to be used with label to sequence. 
