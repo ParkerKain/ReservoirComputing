@@ -7,15 +7,21 @@ import numpy as np
 #----------------------------------------------------------------------------
 
 class Input:
-    def __init__(self, numInputs, problem):
+    def __init__(self, numInputs, problem, streaming):
         """Initializes input patterns and their correct output, with the inputs generated
-        from the createData() function below
+        from the createBatchData() function below
         
-        numInputs - number of inputs to generate by the createData() function
+        numInputs - number of inputs to generate by the createBatchData() function
         """
         
         self.problem = problem
-        self.createData(numInputs, problem)            
+        self.streaming = streaming
+        self.currentParity = 0
+        if streaming:
+            self.listU = []
+        else:
+            self.createBatchData(numInputs, problem)
+
         self.inputCounter = 0
         self.numInputs = numInputs
         
@@ -65,27 +71,69 @@ class Input:
         """Reset the input counter back to 0, to allow for multiple epochs"""
         self.inputCounter = 0
         
-    def createData(self, length, problem):
+    def createBatchData(self, length, problem):
         """Create binary strings, and a count of if there are more 1's in the last 10 timesteps
         
         length - length of the string to create
         """
-        u = np.random.randint(2, size=length).reshape(length,1)
-        y = []
+        if problem == 'heaviness':
+            u = np.random.randint(2, size=length).reshape(length,1)
+            y = []
+            
+            for i in range(length):
+                if i < 10:
+                    num1 = sum(u[0:i+1])
+                    num0 = (i+1) - num1
+                    y.append(int(num1 >= num0))
+                else:
+                    num1 = sum(u[i-9:i+1])
+                    num0 = 10 - num1
+                    y.append(int(num1 > num0))
+            
+            self.u = u
+            self.y = np.array(y)
         
-        for i in range(length):
-            if i < 10:
-                num1 = sum(u[0:i+1])
-                num0 = (i+1) - num1
-                y.append(int(num1 >= num0))
-            else:
-                num1 = sum(u[i-9:i+1])
-                num0 = 10 - num1
-                y.append(int(num1 > num0))
-        
-        self.u = u
-        self.y = np.array(y)
+        if problem == 'parity':
+            u = np.random.randint(2, size=length).reshape(length,1)
+            y = []
+            self.currentParity = np.array([0])
+            
+            for i in range(length):
+                self.currentU = u[i]
+                self.currentParity = (self.currentParity + self.currentU) % 2
+                y.append(self.currentParity)
+                
+            self.u = u
+            self.y = np.array(y)
     
+    def createStreamData(self, problem):
+        """Creates a single input and output for a given problem, to be run at each 
+        timestep"""
+        if problem == 'heaviness':
+            self.currentU = np.random.randint(2)
+            self.listU.append(self.currentU)
+            if len(self.listU) > 10:
+                self.listU = self.listU[1:]
+            self.currentLen = len(self.listU)
+                
+            self.u = np.array(self.listU)
+    
+            num1 = sum(self.listU)
+            num0 = self.currentLen - num1
+            self.y = int(num1 > num0)
+        
+        if problem == 'parity':
+            
+            self.currentU = np.random.randint(2)
+            self.listU.append(self.currentU)
+            self.u = np.array(self.listU)
+            
+            self.currentParity = (self.currentParity + self.currentU) % 2
+            self.y = self.currentParity
+            
+        
+        return(np.array([[self.currentU]]), np.array([self.y]))
+        
     def getU(self):
         """Returns all input patterns"""
         return(self.u)
@@ -93,6 +141,10 @@ class Input:
     def getY(self):
         """Returns all expected outputs"""
         return(self.y)
+        
+    def getStreaming(self):
+        """Returns whether or not the data is streaming"""
+        return(self.streaming)
         
     def getNumInputs(self):
         """Returns the number of timesteps in the training pattern"""
@@ -118,7 +170,7 @@ class Input:
 #----------------------------------------------------------------------------
 #Define RC Class (numNeurons not implemented)
 class RC:
-    def __init__(self, numNeurons, numInputs):
+    def __init__(self, numNeurons, numInputs, gain, batch):
         """Creates the reservoir, initializing the weights to random numbers.
         
         numNeurons -- not implemented
@@ -131,19 +183,26 @@ class RC:
         self.x = np.zeros((self.numNeurons,1))
         self.states = []
         self.numInputs = numInputs
+        self.gain = gain
         
         #Set Weights and Biases (random)
-        self.W_i2r = np.random.rand(1,self.numNeurons) * 2 - 1 #Input to Reservoir
-        self.W_r2r = np.random.rand(self.numNeurons,self.numNeurons) * 2 - 1 #Reservoir to Reservoir
-        self.W_b2r = np.random.rand(self.numNeurons,1) * 2 - 1 #Bias to Reservoir
+        if batch:
+            self.W_i2r = np.random.rand(1,self.numNeurons) * 2 - 1 #Input to Reservoir
+            self.W_r2r = np.random.rand(self.numNeurons,self.numNeurons) * 2 - 1 #Reservoir to Reservoir
+            self.W_b2r = np.random.rand(self.numNeurons,1) * 2 - 1 #Bias to Reservoir
+        else:
+            self.W_i2r = np.random.rand(1,self.numNeurons) * 0 #Input to Reservoir
+            self.W_r2r = np.random.rand(self.numNeurons,self.numNeurons) * 0 #Reservoir to Reservoir
+            self.W_b2r = np.random.rand(self.numNeurons,1) * 0 #Bias to Reservoir
+
     
     def update(self, u):      
         """Given a new input, passes said input through the reservoir and returns the new state
         
         u - input pattern from the Input class (returned by nextU() method), numpy array
         """
-        
-        self.x = np.tanh((self.W_r2r.T @ self.x) + (self.W_i2r.T @ u) + (self.W_b2r))
+    
+        self.x = np.tanh((self.W_r2r.T @ self.x) + (self.gain*(self.W_i2r.T @ u)) + (self.W_b2r))
         self.states.append(self.x)
         return(self.x)
     
@@ -233,7 +292,8 @@ class Readout:
         #Set Initial Weights
         self.numNeurons = numNeurons
         self.W_r2o = np.random.rand(numNeurons, 1) * 2 - 1 #Reservoir to Output
-        self.W_b2o = np.random.rand(1, 1) * 2 - 1 #Output to Reservoir
+        self.W_b2o = np.random.rand(1, 1) * 2 - 1 #Bias to Output
+        self.W_i2o = np.random.rand(1, 1) * 2 - 1
         
         #Set some storage for outputs
         self.outputs = []
@@ -242,14 +302,14 @@ class Readout:
         #Set learning rate (for online)
         self.epsilon = epsilon
         
-    def getOutput(self, x):
+    def getOutput(self, x, u):
         """Takes a state from the RC class and returns the 
         output after passing it through the readout layer
         
         x - states from reservoir (numpy array)
         """
         
-        y = (self.W_r2o.T @ x) + (self.W_b2o)
+        y = (self.W_r2o.T @ x) + (self.W_i2o.T @ u) + (self.W_b2o)
         self.outputs.append(y)
         return(y)
     
@@ -263,7 +323,7 @@ class Readout:
         self.W_r2o = w
         self.W_b2o = b        
         
-    def gradientUpdate(self, w, b):
+    def gradientUpdate(self, w, b, i = None):
         """Updates the Readout layer weights and bias by a factor of the gradient
         
         w - change to weight matrix (numpy array)
@@ -272,7 +332,8 @@ class Readout:
         
         self.W_r2o -= self.epsilon * w
         self.W_b2o -= self.epsilon * b
-        
+        self.W_i2o -= self.epsilon * i
+    
     
     def getR2O(self):
         """Returns the current reservoir to output weight matrix"""
@@ -283,6 +344,10 @@ class Readout:
         """Returns the current bias to the output"""
         
         return(self.W_b2o)
+    
+    def getI2O(self):
+        """Returns the current weights to from the input to output layers"""
+        return(self.W_i2o)
     
     def getAllOutputs(self):
         """Returns all appended outputs"""
@@ -313,10 +378,10 @@ def boundOutput(currentOutput):
     return(currentOutput)
         
 #----------------------------------------------------------------------------
-def testLearn(numInputs, problem, my_RC, my_Data, my_Readout):    
+def testLearn(numInputs, problem, streaming, my_RC, my_Data, my_Readout):    
 
     #Test Learning
-    my_Test_Data = Input(numInputs, problem)
+    my_Test_Data = Input(numInputs, problem, streaming)
     
     outputs = []
     my_RC.clearStates()
@@ -326,7 +391,7 @@ def testLearn(numInputs, problem, my_RC, my_Data, my_Readout):
     for i in range(my_Data.getNumInputs()):
         nextInput = my_Test_Data.nextU()
         currentState = my_RC.update(nextInput)
-        currentOutput = my_Readout.getOutput(currentState)
+        currentOutput = my_Readout.getOutput(currentState, nextInput)
         outputs.append(currentOutput[0])
         
     outputs = my_Readout.getAllOutputs()
@@ -355,7 +420,7 @@ def batchLearn(my_Data, my_RC, my_Readout, epochs, verbose):
         for i in range(my_Data.getNumInputs()):
             nextInput = my_Data.nextU()
             currentState = my_RC.update(nextInput)
-            currentOutput = my_Readout.getOutput(currentState)
+            currentOutput = my_Readout.getOutput(currentState, nextInput)
             outputs.append(currentOutput[0])
     
             if verbose:
@@ -375,7 +440,7 @@ def batchLearn(my_Data, my_RC, my_Readout, epochs, verbose):
         print('Training Percent Correct:', count)
 
 
-        print('First 20 Expected:\n',my_Data.getY()[0:20])
+        print('First 20 Expected:\n',my_Data.getY()[0:20].reshape(1,20))
         print('First 20 Actual:\n',np.round(outputs,0).astype(int)[0:20].reshape(1,20))
 
         #Adjust Weight Matrix
@@ -415,7 +480,7 @@ def onlineLearn(my_Data, my_RC, my_Readout, epochs, verbose, bound):
             
             #Pass through network
             currentState = my_RC.update(nextInput)
-            currentOutput = my_Readout.getOutput(currentState)
+            currentOutput = my_Readout.getOutput(currentState, nextInput)
             
             #Bound output between 0 and 1, if wanted
             if bound:
@@ -441,41 +506,91 @@ def onlineLearn(my_Data, my_RC, my_Readout, epochs, verbose, bound):
 
         
         #Test accuracy on new data
-        testLearn(my_Data.getNumInputs(), my_Data.getProblem(), my_RC, my_Data, my_Readout)
+        testLearn(my_Data.getNumInputs(), my_Data.getProblem(), my_Data.getStreaming(), my_RC, my_Data, my_Readout)
 
 
     return(my_Readout)
+    
+#----------------------------------------------------------------------------
+def trueOnlineLearn(my_Data, my_RC, my_Readout, epochs, verbose, problem, bound):
+    """Uses true online learning to create an infinite input/output sequences for
+    the given problem and learn until error stops decreasing or hits an acceptable level"""
+    
+    my_RC.clearStates()
+    my_Readout.clearReadout()
+    accuracyList = []
+    t = 0
+    
+    while True:
+        t = t + 1
+        print('----------------------------------------------------')
+        print('Beginning Timestep:', t)
+        (nextInput, nextOutput) = my_Data.createStreamData(problem)
+        
+    #Pass through network
+        currentState = my_RC.update(nextInput)
+        currentOutput = my_Readout.getOutput(currentState, nextInput)
+        if bound:
+            currentOutput = boundOutput(currentOutput)
+    #Calculate error and gradient
+        error = currentOutput - nextOutput   
+        appendedState = np.append(my_RC.appendBiasOnline(),my_Readout.getI2O(), axis = 0)
+        gradient = error * appendedState
+        
+    #Bound output, and assess accuracy
+        bounded = boundOutput(currentOutput)
+        #print(bounded, nextOutput, bounded == nextOutput)
+        
+        accuracyList.append(bounded == nextOutput)
+        if len(accuracyList) > 100:
+            accuracyList = accuracyList[1:]
+        currentAccuracy = (sum(accuracyList) / len(accuracyList))[0]
+        print('Current Accuracy Over Last', len(accuracyList), '...', currentAccuracy)
+        if currentAccuracy == 1 and t >= 100:
+            break
+        
+        #Make updates
+        
+        w = gradient[0:my_RC.getNumNeurons(),:]
+        b = gradient[my_RC.getNumNeurons(),:]
+        i = gradient[my_RC.getNumNeurons()+1,:]
+        my_Readout.gradientUpdate(w, b, i)
+    
 #----------------------------------------------------------------------------
 
-def main(verbose):
+def main():
     """Creates and trains a neural net with a reservoir to 
     learn simple binary pattern recognition over time"""
     
     #Set seed
-    np.random.seed(10)
+    np.random.seed(20)
     
     #Set hyperparameters
-    problem = 'heaviness' #NOT IMPLEMENTED
-    numInputs = 20
-    numRCNeurons = 2
+    #FOR HEAVINESS TASK USE 20 Neurons, 0.05 learning rate!
+    problem = 'heaviness' 
+    verbose = False
+    numInputs = 1000
+    numRCNeurons = 20
     numOutputs = 1
-    batch = True
+    batch = False
+    gain = 1
+    
     #These only apply to online learning
-    learningRate = 0.0001
-    momentum = 0
+    learningRate = 0.05
     epochs = 500
     bound = True
-
+    streaming = True
     
     #Create u and y
     print('Creating Data ... ( length =', numInputs, ')\n')
-    my_Data = Input(numInputs, problem)
-    my_Data.printLast5()
+    my_Data = Input(numInputs, problem, streaming)
+    if not streaming:
+        my_Data.printLast5()
     
     #Create reservoir
     print('----------------------------------------------------')
     print('Creating Reservoir ... ( Neurons:', numRCNeurons,')\n')
-    my_RC = RC(numRCNeurons, numInputs)
+    my_RC = RC(numRCNeurons, numInputs, gain, batch)
     my_RC.printRC()
 
     #Create Readout
@@ -488,25 +603,36 @@ def main(verbose):
     if batch:
         #Batch Learn
         my_Readout = batchLearn(my_Data, my_RC, my_Readout, epochs, verbose)
-        testLearn(numInputs, problem, my_RC, my_Data, my_Readout)
+        testLearn(numInputs, problem, streaming, my_RC, my_Data, my_Readout)
+    elif streaming:
+        #True Online Learn
+        my_Readout = trueOnlineLearn(my_Data, my_RC, my_Readout, epochs, verbose, problem, bound)
     else:
         #Online Learn
         my_Readout = onlineLearn(my_Data, my_RC, my_Readout, epochs, verbose, bound)
     
 #----------------------------------------------------------------------------
     
-main(verbose = False)
+main()
 
 
 #Put in a new pattern ** (Works! Sweet spot for timestep to RC neuron ratio around 40/1)
 #Extend the original pattern and see how it learns ** (Concerns about measureing accuracy and overfitting)
 
 # Three tasks:
-# "Heaviness task" **
 # Label with sequence (robot clamping)
-# Parity
+# Parity **
 
 #Recursive least squares?
 
 #Online learning.
 #Training online with gradient descent, see paper. to be used with label to sequence. 
+
+
+#All 16 4 bit patterns mp neuron, positive 1, negative -1, 0 = 0. 40 reservoir neurons in example. 
+#16 sequences in 5000 iterations. 
+
+#Code up pure online learning.
+#If we try to learn parity, add in an input to output connection. 10 SAM cells. 
+#MP neurons may not work, just use a tanh. 
+
