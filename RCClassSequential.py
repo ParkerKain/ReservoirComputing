@@ -191,9 +191,9 @@ class RC:
             self.W_r2r = np.random.rand(self.numNeurons,self.numNeurons) * 2 - 1 #Reservoir to Reservoir
             self.W_b2r = np.random.rand(self.numNeurons,1) * 2 - 1 #Bias to Reservoir
         else:
-            self.W_i2r = np.random.rand(1,self.numNeurons) * 0 #Input to Reservoir
-            self.W_r2r = np.random.rand(self.numNeurons,self.numNeurons) * 0 #Reservoir to Reservoir
-            self.W_b2r = np.random.rand(self.numNeurons,1) * 0 #Bias to Reservoir
+            self.W_i2r = np.random.rand(1,self.numNeurons) * 2 - 1 #Input to Reservoir
+            self.W_r2r = np.random.rand(self.numNeurons,self.numNeurons) * 2 - 1 #Reservoir to Reservoir
+            self.W_b2r = np.random.rand(self.numNeurons,1) * 2 - 1 #Bias to Reservoir
 
     
     def update(self, u):      
@@ -293,8 +293,9 @@ class Readout:
         self.numNeurons = numNeurons
         self.W_r2o = np.random.rand(numNeurons, 1) * 2 - 1 #Reservoir to Output
         self.W_b2o = np.random.rand(1, 1) * 2 - 1 #Bias to Output
-        self.W_i2o = np.random.rand(1, 1) * 2 - 1
-        
+        self.W_i2o = np.random.rand(1, 1) * 2 - 1 #Input to Output
+        self.W_o2o = np.random.rand(1, 1) * 2 - 1 #Output to Output
+        self.o = np.array([0])
         #Set some storage for outputs
         self.outputs = []
         self.numTimesteps = numTimesteps
@@ -309,8 +310,9 @@ class Readout:
         x - states from reservoir (numpy array)
         """
         
-        y = (self.W_r2o.T @ x) + (self.W_i2o.T @ u) + (self.W_b2o)
+        y = (self.W_r2o.T @ x) + (self.W_i2o.T @ u) + (self.W_o2o.T @ self.o) + (self.W_b2o)
         self.outputs.append(y)
+        self.o = y
         return(y)
     
     def updateWeights(self, w, b):
@@ -348,6 +350,10 @@ class Readout:
     def getI2O(self):
         """Returns the current weights to from the input to output layers"""
         return(self.W_i2o)
+        
+    def getO2O(self):
+        """Returns the current weights from the output to output"""
+        return(self.W_o2o)
     
     def getAllOutputs(self):
         """Returns all appended outputs"""
@@ -532,14 +538,18 @@ def trueOnlineLearn(my_Data, my_RC, my_Readout, epochs, verbose, problem, bound)
         currentOutput = my_Readout.getOutput(currentState, nextInput)
         if bound:
             currentOutput = boundOutput(currentOutput)
+            
     #Calculate error and gradient
         error = currentOutput - nextOutput   
         appendedState = np.append(my_RC.appendBiasOnline(),my_Readout.getI2O(), axis = 0)
+        #print(appendedState.reshape(1,22))
+        #appendedState2 = np.append(appendedState, my_Readout.getO2O(), axis = 0)
+        #print(appendedState2)
+        
         gradient = error * appendedState
         
     #Bound output, and assess accuracy
         bounded = boundOutput(currentOutput)
-        #print(bounded, nextOutput, bounded == nextOutput)
         
         accuracyList.append(bounded == nextOutput)
         if len(accuracyList) > 100:
