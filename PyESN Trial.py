@@ -4,6 +4,17 @@ from pyESN import ESN
 #Set Seed
 rng = np.random.RandomState(42)
 
+def sigmoid(a):
+    """Sigmoid (logistic) firing function."""
+    return 1/(1 + np.exp(-a)) 
+    
+def dsigmoid(b):
+    """Derivative of sigmoid firing function b=fire(a), as function of b."""
+    # Used in the backpropagation algorithm to compute error signals at hidden layers.
+    return b*(1-b)
+
+def invsigmoid(a):
+    return np.log(a/(1-a))
 
 def generateParity(length, parity):
     u = np.random.randint(2, size=length).reshape(length,1)
@@ -20,10 +31,11 @@ def generateParity(length, parity):
         currentU = u[i]
         currentParity = (currentParity + currentU) % parity
         
-        parityState = np.zeros((1, parity-1))
+        parityState = np.zeros((1, parity-1)) -1 
         if currentParity != 0:
             parityState[:,currentParity-1] = 1
         
+        parityState = parityState * 0.99
         y.append(parityState)
         
     return(u, np.array(y).reshape(length, parity-1))
@@ -32,14 +44,11 @@ def bounder(x):
      return(1 if x >= 0.5 else 0)
 
 #Create Data
-lengthTrain = 10000
-lengthTest = 10000
-parity = 5
+lengthTrain = 1000
+lengthTest = 1000
+parity = 3
 input_shift = [0]
 (u,y) = generateParity(lengthTrain, parity)
-
-#print(u)
-#print(y)
 
 #Create network
 esn = ESN(n_inputs = 1, 
@@ -48,7 +57,7 @@ esn = ESN(n_inputs = 1,
 #          spectral_radius = 0.25,
           sparsity = 0.9,
           noise = 0.01,
-          input_shift = input_shift,
+#          input_shift = input_shift,
 #          input_scaling = [0.01],
 #          teacher_scaling = 1.12,
           teacher_shift = -0.7,
@@ -57,6 +66,7 @@ esn = ESN(n_inputs = 1,
           random_state = rng,
           silent = False)
 
+print('fitting')
 pred_train = esn.fit(u, y)
 
 #Assess Training Error     

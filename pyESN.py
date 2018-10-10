@@ -1,5 +1,7 @@
 import numpy as np
 
+def sigmoid(x):
+  return 1 / (1 + np.exp(-x))
 
 def correct_dimensions(s, targetlength):
     """checks the dimensionality of some numeric argument s, broadcasts it
@@ -158,6 +160,8 @@ class ESN():
         Returns:
             the network's output on the training data, using the trained weights
         """
+        print('outputs')
+        print(outputs)
         # transform any vectors of shape (x,) into vectors of shape (x,1):
         if inputs.ndim < 2:
             inputs = np.reshape(inputs, (len(inputs), -1))
@@ -166,7 +170,10 @@ class ESN():
         # transform input and teacher signal:
         inputs_scaled = self._scale_inputs(inputs)
         teachers_scaled = self._scale_teacher(outputs)
-
+        
+        
+        print(self.input_scaling)
+        
         if not self.silent:
             print("harvesting states...")
         # step the reservoir through the given input,output pairs:
