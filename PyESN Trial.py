@@ -31,11 +31,11 @@ def generateParity(length, parity):
         currentU = u[i]
         currentParity = (currentParity + currentU) % parity
         
-        parityState = np.zeros((1, parity-1)) -1 
+        parityState = np.zeros((1, parity-1)) 
         if currentParity != 0:
             parityState[:,currentParity-1] = 1
         
-        parityState = parityState * 0.99
+        parityState = parityState
         y.append(parityState)
         
     return(u, np.array(y).reshape(length, parity-1))
