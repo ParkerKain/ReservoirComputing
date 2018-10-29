@@ -34,7 +34,7 @@ def generateParity(length, parity):
         parityState = parityState
         y.append(parityState)
         
-    return(u, np.array(y).reshape(length, parity-1))
+    return((u, np.array(y).reshape(length, parity-1)))
 
 #Define Model
 
@@ -81,15 +81,17 @@ class tfESN():
                                        use_bias = True,
                                        name = 'Readout')
 
-        PLZ = self.readout(self.currentState)
-    def update(self, u):
+        test = self.readout(self.currentState)
+    def update(self, data):
         """
         Given an input, passes it through the reservoir and returns the state of the reservoir.
         
         Args:
             u: current input pattern for a given timestep
         """
-        u = tf.cast(u, dtype=tf.float32)
+        u = tf.cast(data["u"], dtype=tf.float32)
+        y_true = tf.reshape(tf.cast(data["y"], dtype=tf.float32),[1, 1])
+
         
         #Reservoir
         partInput = tf.reshape(tf.tensordot(self.W_in, u, 1),[20,1])
@@ -100,7 +102,12 @@ class tfESN():
         #Readout
         output = self.readout(tf.reshape(currentState, shape = [1, 20]))
         
-        return(output)
+        loss = tf.losses.mean_squared_error(labels=y_true, predictions=output)
+        optimizer = tf.train.GradientDescentOptimizer(0.01)
+        train = optimizer.minimize(loss)
+
+        
+        return(train, loss) 
         
     def fit(self, trainInputs, trainOutputs):
         """
@@ -111,7 +118,12 @@ class tfESN():
             trainOutputs: (numberOfTimesteps) x (numberOfOutputs) numpy array
         """
         
-        dataset = tf.data.Dataset.from_tensor_slices(u)
+        #dataset = tf.data.Dataset.from_tensor_slices(u)
+        
+        dataset = tf.data.Dataset.from_tensor_slices(
+                {'u': tf.convert_to_tensor(trainInputs, dtype=tf.float32),
+                 'y': tf.convert_to_tensor(trainOutputs, dtype=tf.float32)})
+        
         iterator = dataset.make_initializable_iterator()
         next_row = iterator.get_next()
         sess.run(iterator.initializer)
@@ -119,7 +131,8 @@ class tfESN():
         
         while True:
             try:
-               updated = sess.run(self.update(tf.cast(next_row, tf.float32)))
+               (train, loss) = sess.run(self.update(next_row))
+               print(loss)
             except tf.errors.OutOfRangeError:
                 break
         
@@ -131,7 +144,8 @@ lengthTest = 1000
 parity = 2
 readout_neurons = 1
 
-(u,y) = generateParity(lengthTrain, parity)        
+(u, y) = generateParity(lengthTrain, parity)        
+
 
 #Initialize Model
 n_inputs = 1
@@ -143,16 +157,14 @@ my_res = tfESN(n_inputs = n_inputs,
                n_outputs = n_outputs, 
                n_readout = readout_neurons)
 
-test = my_res.update(u)
 
 init = tf.initialize_all_variables()
 sess = tf.Session()
 sess.run(init)
 
 #Iterate
-updated = my_res.fit(u, y)
+loss = my_res.fit(u, y)
 
-print(updated)
 
 writer = tf.summary.FileWriter('.')
 writer.add_graph(tf.get_default_graph())
