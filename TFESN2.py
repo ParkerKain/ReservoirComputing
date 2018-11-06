@@ -43,8 +43,8 @@ def generateParity(length, parity):
 #---------------------------------------------------------------------------
 #Hyperparameters 
 #-------------------------------------
-
-n_inputs = 1
+tf.set_random_seed(1234)
+n_inputs = 100
 n_reservoir = 5
 n_readout = 1
 
@@ -52,7 +52,7 @@ n_readout = 1
 #Define the Data
 #-------------------------------------
 
-lengthTrain = 1
+lengthTrain = 100
 lengthTest = 1000
 parity = 2
 n_outputs = parity - 1
@@ -62,6 +62,7 @@ n_outputs = parity - 1
 #-------------------------------------
 #Generate Network
 #-------------------------------------
+
 #Make Iterator
 dataset = tf.data.Dataset.from_tensor_slices(
             {'u': tf.convert_to_tensor(u, dtype=tf.float32),
@@ -75,8 +76,13 @@ my_ESN = tfESN(10)
 currentState = my_ESN(next_row['u'])       
 
 #Readout
-readout = tf.layers.Dense(units = 1, use_bias = True, name = 'Readout')
+readout = tf.layers.Dense(units = 1, 
+                          use_bias = True,
+                          activation = tf.tanh,
+                          name = 'Readout')
+
 y_pred = tf.reshape(readout(currentState),[1,])
+
 #-------------------------------------
 #Loss
 #-------------------------------------
@@ -89,11 +95,17 @@ with tf.name_scope('Training_Parameters'):
     optimizer = tf.train.GradientDescentOptimizer(0.01)
     train = optimizer.minimize(loss)
 
+
 init = tf.global_variables_initializer()
 sess = tf.Session()
-#sess = tf_debug.LocalCLIDebugWrapperSession(sess) #Debugging
 sess.run(init)
+sess.run(iterator.initializer)
 
+#sess = tf_debug.LocalCLIDebugWrapperSession(sess) #Debugging
+for i in range(100):
+    _, current_loss = sess.run((train,loss))
+    print(current_loss)
+    
 #-------------------------------------
 #Output Graph
 #-------------------------------------
