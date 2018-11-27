@@ -45,11 +45,6 @@ def generateParity(length, parity):
 #-------------------------------------
 #tf.set_random_seed(1234)
 n_readout = 1
-
-#-------------------------------------
-#Define the Data
-#-------------------------------------
-
 lengthTrain = 10000
 lengthTest = 10000 
 parity = 2
@@ -58,6 +53,12 @@ teacher_scaling = 1.12
 n_outputs = parity - 1
 n_reservoir = 150
 output_activation = tf.tanh
+train_file_location = "C:/Users/parke/Documents/Capstone/PythonCode/training"
+test_file_location = "C:/Users/parke/Documents/Capstone/PythonCode/testing"
+
+#-------------------------------------
+#Define the Data
+#-------------------------------------
 
 (u_train, y_train, y_lag_train) = generateParity(lengthTrain, parity) 
 (u_test, y_test, y_lag_test) = generateParity(lengthTest, parity) 
@@ -75,7 +76,6 @@ dataset = tf.data.Dataset.from_tensor_slices(({'u': u,
     
 iterator = dataset.make_initializable_iterator()
 next_row = iterator.get_next()
-#Initialize Outputs
 
 #Make Reservoir
 my_ESN = tfESN(n_reservoir, teacher_shift, teacher_scaling)
@@ -110,7 +110,7 @@ init_l = tf.local_variables_initializer()
 sess = tf.Session()
 sess.run(init_g)
 sess.run(init_l)
-sess.run(iterator.initializer, feed_dict={ u: u_train, y: y_train, y_lag:y_lag_train})
+sess.run(iterator.initializer, feed_dict={u: u_train, y: y_train, y_lag:y_lag_train})
 
 #-------------------------------------
 #Initialize Tensorboard Grpah and Summarise
@@ -119,8 +119,8 @@ tf.summary.scalar('loss',loss)
 tf.summary.scalar('accuracy', acc)
 
 merged_summary = tf.summary.merge_all()
-writer = tf.summary.FileWriter("C:/Users/parke/Documents/Capstone/PythonCode/training")
-test_writer = tf.summary.FileWriter('C:/Users/parke/Documents/Capstone/PythonCode/testing')
+writer = tf.summary.FileWriter(train_file_location)
+test_writer = tf.summary.FileWriter(test_file_location)
 writer.add_graph(sess.graph)
 
 #sess = tf_debug.LocalCLIDebugWrapperSession(sess) #Debugging
@@ -130,9 +130,14 @@ writer.add_graph(sess.graph)
 #-------------------------------------
 print('Training ...')
 for i in range(lengthTrain):
+    #Run one timestep
     (summary, _, current_loss, cur_acc_op, cur_acc) = sess.run((merged_summary, train, loss, acc_op, acc))
+    
+    #Give status update
     if (i+1) % 1000 == 0:
         print(round(i / lengthTrain * 100), '% complete')  
+    
+    #Write summary to tensorboard
     if i % 100 == 0:
         writer.add_summary(summary, i)
 
@@ -141,9 +146,18 @@ for i in range(lengthTrain):
 #-------------------------------------
 #sess = tf_debug.LocalCLIDebugWrapperSession(sess) #Debugging
 print('Switching to Test ... ')
-sess.run(iterator.initializer, feed_dict={u: u_test, y: y_test, y_lag:y_lag_test})
-for i in range(lengthTest):
-    (summary, _, current_loss, cur_acc_op, cur_acc) = sess.run((merged_summary, train, loss, acc_op, acc))
 
+#Reinitialize data with test set
+sess.run(iterator.initializer, feed_dict={u: u_test, y: y_test, y_lag:y_lag_test})
+
+for i in range(lengthTest):
+    #Do a single passthrough
+    (summary, _, current_loss, cur_acc_op, cur_acc) = sess.run((merged_summary, train, loss, acc_op, acc))
+    
+    #Status update
+    if (i+1) % 1000 == 0:
+        print(round(i / lengthTest * 100), '% complete') 
+    
+    #Write to tensorboard
     if i % 100 == 0:
         test_writer.add_summary(summary, i)

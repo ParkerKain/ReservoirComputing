@@ -2,12 +2,16 @@ import tensorflow as tf
 
 class tfESN(tf.keras.layers.Layer):
 
-  def __init__(self, n_reservoir, teacher_shift, teacher_scale):
+  def __init__(self, n_reservoir, 
+                       teacher_shift = 0, 
+                       teacher_scale = 1):
     """
     Builds any parameters that are not based on the inputs recieved by the layer
     
     args:
         n_reservoir: number of reservoir neurons
+        teacher_shift: amount to shift the true outputs that are fed back into the reservoir
+        teacher_scale: amount to scale the true outputs that are fed back into the reservoir
     """
     super(tfESN, self).__init__(trainable = False)    
     self.n_reservoir = n_reservoir
@@ -20,7 +24,9 @@ class tfESN(tf.keras.layers.Layer):
     Hence all of the input based weights are defined here.
     
     args:
-        inputs: The inputs to pass through the layer, typically a tensor
+        inputs: A list inputs to pass through the layer. Usually a list of tensors, the first element
+                being the input to pass through the reservoir, and the second being the previous 
+                timestep's true output.
     """
     
     passed = inputs[0]
@@ -56,7 +62,9 @@ class tfESN(tf.keras.layers.Layer):
     This handles the actual passing through of the layer
     
     args:
-        inputs: the input to pass through the layer
+        inputs: Same as above. A list inputs to pass through the layer. Usually a list of tensors, 
+                the first element being the input to pass through the reservoir, and the second 
+                being the previous timestep's true output.
     """
     
     passed = inputs[0]
