@@ -3,7 +3,6 @@ import numpy as np
 from RCLayer import tfESN
 from tensorflow.python import debug as tf_debug
 
-
 tf.reset_default_graph()
 
 
@@ -37,49 +36,55 @@ def generateParity(length, parity):
         
         parityState = parityState
         y.append(parityState)
-        
-    return((u, np.array(y).reshape(length, parity-1)))
+    y = np.array(y).reshape(length, parity-1)
+    y_lag = np.append(np.array([0]), y)[:-1].reshape(length, parity-1)
+    return((u, y, y_lag))
 
 #---------------------------------------------------------------------------
 #Hyperparameters 
 #-------------------------------------
-tf.set_random_seed(1234)
-n_inputs = 100
-n_reservoir = 5
+#tf.set_random_seed(1234)
 n_readout = 1
 
 #-------------------------------------
 #Define the Data
 #-------------------------------------
 
-lengthTrain = 1000
-lengthTest = 100
+lengthTrain = 10000
+lengthTest = 10000 
 parity = 2
+teacher_shift = -0.7
+teacher_scaling = 1.12
 n_outputs = parity - 1
+n_reservoir = 150
+output_activation = tf.tanh
 
-(u_train, y_train) = generateParity(lengthTrain, parity) 
-(u_test, y_test) = generateParity(lengthTest, parity) 
+(u_train, y_train, y_lag_train) = generateParity(lengthTrain, parity) 
+(u_test, y_test, y_lag_test) = generateParity(lengthTest, parity) 
+
 
 #-------------------------------------
 #Generate Network
 #-------------------------------------
 
 #Make Iterator
-u, y = tf.placeholder(tf.float32, shape=[None,1]), tf.placeholder(tf.float32, shape=[None,1])
+u, y, y_lag = tf.placeholder(tf.float32, shape=[None,1]), tf.placeholder(tf.float32, shape=[None,1]), tf.placeholder(tf.float32, shape=[None,1])
 dataset = tf.data.Dataset.from_tensor_slices(({'u': u, 
-                                               'y': y}))    
+                                               'y': y,
+                                               'y_lag':y_lag}))    
     
 iterator = dataset.make_initializable_iterator()
 next_row = iterator.get_next()
+#Initialize Outputs
 
 #Make Reservoir
-my_ESN = tfESN(10)
-currentState = my_ESN(next_row['u'])       
+my_ESN = tfESN(n_reservoir, teacher_shift, teacher_scaling)
+currentState = my_ESN((next_row['u'], next_row['y_lag']))       
 
 #Readout
 readout = tf.layers.Dense(units = 1, 
                           use_bias = True,
-                          activation = tf.tanh,
+                          activation = output_activation,
                           name = 'Readout')
 
 #Get prediction
@@ -93,24 +98,29 @@ with tf.name_scope('Training_Parameters'):
     #-------------------------------------
     #Training Measurements
     #-------------------------------------
-    optimizer = tf.train.GradientDescentOptimizer(0.01)
+    optimizer = tf.train.AdamOptimizer()
     train = optimizer.minimize(loss)
+    acc, acc_op = tf.metrics.accuracy(tf.round(next_row['y']), tf.round(y_pred), name = 'accuracy')
     
 #-------------------------------------
 #Initialize Variables
 #-------------------------------------
-init = tf.global_variables_initializer()
+init_g = tf.global_variables_initializer()
+init_l = tf.local_variables_initializer()
 sess = tf.Session()
-sess.run(init)
-sess.run(iterator.initializer, feed_dict={ u: u_train, y: y_train})
+sess.run(init_g)
+sess.run(init_l)
+sess.run(iterator.initializer, feed_dict={ u: u_train, y: y_train, y_lag:y_lag_train})
 
 #-------------------------------------
 #Initialize Tensorboard Grpah and Summarise
 #-------------------------------------
 tf.summary.scalar('loss',loss)
+tf.summary.scalar('accuracy', acc)
 
 merged_summary = tf.summary.merge_all()
-writer = tf.summary.FileWriter(".")
+writer = tf.summary.FileWriter("C:/Users/parke/Documents/Capstone/PythonCode/training")
+test_writer = tf.summary.FileWriter('C:/Users/parke/Documents/Capstone/PythonCode/testing')
 writer.add_graph(sess.graph)
 
 #sess = tf_debug.LocalCLIDebugWrapperSession(sess) #Debugging
@@ -119,27 +129,21 @@ writer.add_graph(sess.graph)
 #Training
 #-------------------------------------
 print('Training ...')
-outputsPred = []
-outputsTrain = []
 for i in range(lengthTrain):
-    (summary, _, current_loss, predicted, actual) = sess.run((merged_summary, train, loss, y_pred, next_row['y']))
-    outputsPred.append(predicted)
-    outputsTrain.append(actual)
-    if i >= 100:
-        accuracy = np.sum(np.abs(np.round(np.array(outputsPred) - np.array(outputsTrain)))/ 100)
-        tf.summary.scalar('accuracy',accuracy)
-        outputsPred = outputsPred[1:101]
-        outputsTrain = outputsTrain[1:101]
+    (summary, _, current_loss, cur_acc_op, cur_acc) = sess.run((merged_summary, train, loss, acc_op, acc))
     if (i+1) % 1000 == 0:
-        print(round(i / lengthTrain * 100), '% complete')        
-    writer.add_summary(summary, i)
-    #print(current_loss)
+        print(round(i / lengthTrain * 100), '% complete')  
+    if i % 100 == 0:
+        writer.add_summary(summary, i)
 
 #-------------------------------------
 #Testing
 #-------------------------------------
+#sess = tf_debug.LocalCLIDebugWrapperSession(sess) #Debugging
 print('Switching to Test ... ')
-sess.run(iterator.initializer, feed_dict={u: u_test, y: y_test})
+sess.run(iterator.initializer, feed_dict={u: u_test, y: y_test, y_lag:y_lag_test})
 for i in range(lengthTest):
-    test_predicted = sess.run((y_pred))
-    #print(test_predicted)
+    (summary, _, current_loss, cur_acc_op, cur_acc) = sess.run((merged_summary, train, loss, acc_op, acc))
+
+    if i % 100 == 0:
+        test_writer.add_summary(summary, i)
