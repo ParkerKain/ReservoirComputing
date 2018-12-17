@@ -1,3 +1,10 @@
+# RCLayer.py
+# Parker Kain 
+# Extends the layers class from keras to create a reservoir layer. This allows the user to 
+# plug this layer into any tensorflow architecture, which can be used for dequential learning
+# with minimal computational overhead. 
+
+
 import tensorflow as tf
 
 class tfESN(tf.keras.layers.Layer):
@@ -30,9 +37,9 @@ class tfESN(tf.keras.layers.Layer):
     """
     
     passed = inputs[0]
-    
     self.spectral_radius = 0.95
-    self.n_inputs = passed[0] 
+    self.n_outputs = inputs[1][0]
+    self.n_inputs = 1 #ONLY WORKS FOR PARITY
     
     #Initialize the reservoir to reservoir weights
     self.W_res = tf.get_variable("tf_esn/WeightsFromReservoir", [self.n_reservoir, self.n_reservoir], 
@@ -50,7 +57,7 @@ class tfESN(tf.keras.layers.Layer):
     self.B_in = tf.get_variable("tf_esn/Bias", [self.n_reservoir, 1], trainable = False)
 
     #Initialize the output to reservoir weights
-    self.W_out = tf.get_variable("tf_esn/WeightsFromOutput", [self.n_reservoir, 1], 
+    self.W_out = tf.get_variable("tf_esn/WeightsFromOutput", [self.n_reservoir, self.n_outputs], 
                                  initializer = tf.initializers.random_uniform(minval = -1, maxval=1), trainable = False)
 
     #Initialize the current state
@@ -68,11 +75,12 @@ class tfESN(tf.keras.layers.Layer):
     """
     
     passed = inputs[0]
+
     lastOutput = inputs[1] * self.teacher_scale + self.teacher_shift
     
-    partInput = tf.reshape(tf.tensordot(self.W_in, passed, 1),[self.n_inputs, self.n_reservoir], name = 'partInput')
+    partInput = tf.reshape(tf.tensordot(self.W_in, passed, 1),[1, self.n_reservoir], name = 'partInput')
     partReservoir = tf.transpose(tf.tensordot(self.W_res, self.x, 1), name = 'partReservoir')
-    partOutput = tf.reshape(tf.tensordot(self.W_out, lastOutput, 1),[self.n_inputs, self.n_reservoir], name = 'partOutput')
+    partOutput = tf.reshape(tf.tensordot(self.W_out, lastOutput, 1),[1, self.n_reservoir], name = 'partOutput')
     partBias = tf.transpose(self.B_in, name = 'partBias')
     
     

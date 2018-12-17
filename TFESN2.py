@@ -1,3 +1,11 @@
+# TFESN2.py
+# Parker Kain 
+# This code is a framework for testing sequential parity on various neural net architectures.
+# Here, we use a reservoir layer created by RCLayer.py followed by a dense layer.
+# Changing parity length will allow the user to see how the framework scales to more complicated tasks.
+
+
+
 import tensorflow as tf
 import numpy as np
 from RCLayer import tfESN
@@ -42,23 +50,23 @@ def generateParity(length, parity):
 
 #---------------------------------------------------------------------------
 #Hyperparameters 
-#-------------------------------------
+#---------------------------------------------------------------------------
 #tf.set_random_seed(1234)
-n_readout = 1
-lengthTrain = 10000
-lengthTest = 10000 
+lengthTrain = 5000
+lengthTest = 5000
 parity = 2
 teacher_shift = -0.7
 teacher_scaling = 1.12
+n_inputs = 1
 n_outputs = parity - 1
 n_reservoir = 150
 output_activation = tf.tanh
 train_file_location = "C:/Users/parke/Documents/Capstone/PythonCode/training"
 test_file_location = "C:/Users/parke/Documents/Capstone/PythonCode/testing"
 
-#-------------------------------------
+#---------------------------------------------------------------------------
 #Define the Data
-#-------------------------------------
+#---------------------------------------------------------------------------
 
 (u_train, y_train, y_lag_train) = generateParity(lengthTrain, parity) 
 (u_test, y_test, y_lag_test) = generateParity(lengthTest, parity) 
@@ -69,11 +77,10 @@ test_file_location = "C:/Users/parke/Documents/Capstone/PythonCode/testing"
 #-------------------------------------
 
 #Make Iterator
-u, y, y_lag = tf.placeholder(tf.float32, shape=[None,1]), tf.placeholder(tf.float32, shape=[None,1]), tf.placeholder(tf.float32, shape=[None,1])
+u, y, y_lag = tf.placeholder(tf.float32, shape=[None,1]), tf.placeholder(tf.float32, shape=[None,n_outputs]), tf.placeholder(tf.float32, shape=[None,n_outputs])
 dataset = tf.data.Dataset.from_tensor_slices(({'u': u, 
                                                'y': y,
                                                'y_lag':y_lag}))    
-    
 iterator = dataset.make_initializable_iterator()
 next_row = iterator.get_next()
 
@@ -82,13 +89,13 @@ my_ESN = tfESN(n_reservoir, teacher_shift, teacher_scaling)
 currentState = my_ESN((next_row['u'], next_row['y_lag']))       
 
 #Readout
-readout = tf.layers.Dense(units = 1, 
+readout = tf.layers.Dense(units = n_outputs, 
                           use_bias = True,
                           activation = output_activation,
                           name = 'Readout')
 
 #Get prediction
-y_pred = tf.reshape(readout(currentState),[1,])
+y_pred = tf.reshape(readout(currentState),[n_outputs,])
 
 #-------------------------------------
 #Loss
@@ -117,6 +124,7 @@ sess.run(iterator.initializer, feed_dict={u: u_train, y: y_train, y_lag:y_lag_tr
 #-------------------------------------
 tf.summary.scalar('loss',loss)
 tf.summary.scalar('accuracy', acc)
+tf.summary.scalar('other_accuracy', acc_op)
 
 merged_summary = tf.summary.merge_all()
 writer = tf.summary.FileWriter(train_file_location)
