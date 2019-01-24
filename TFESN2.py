@@ -4,8 +4,6 @@
 # Here, we use a reservoir layer created by RCLayer.py followed by a dense layer.
 # Changing parity length will allow the user to see how the framework scales to more complicated tasks.
 
-
-
 import tensorflow as tf
 import numpy as np
 from RCLayer import tfESN
@@ -52,17 +50,17 @@ def generateParity(length, parity):
 #Hyperparameters 
 #---------------------------------------------------------------------------
 #tf.set_random_seed(1234)
-lengthTrain = 5000
-lengthTest = 5000
+lengthTrain = 1000
+lengthTest = 1000
 parity = 2
 teacher_shift = -0.7
 teacher_scaling = 1.12
 n_inputs = 1
 n_outputs = parity - 1
-n_reservoir = 150
+n_reservoir = 50
 output_activation = tf.tanh
-train_file_location = "C:/Users/parke/Documents/Capstone/PythonCode/training"
-test_file_location = "C:/Users/parke/Documents/Capstone/PythonCode/testing"
+train_file_location = "C:/Users/kainp1/Documents/GitHub/ReservoirComputing/training"
+test_file_location = "C:/Users/kainp1/Documents/GitHub/ReservoirComputing/testing"
 
 #---------------------------------------------------------------------------
 #Define the Data
@@ -75,7 +73,6 @@ test_file_location = "C:/Users/parke/Documents/Capstone/PythonCode/testing"
 #-------------------------------------
 #Generate Network
 #-------------------------------------
-
 #Make Iterator
 u, y, y_lag = tf.placeholder(tf.float32, shape=[None,1]), tf.placeholder(tf.float32, shape=[None,n_outputs]), tf.placeholder(tf.float32, shape=[None,n_outputs])
 dataset = tf.data.Dataset.from_tensor_slices(({'u': u, 
@@ -88,14 +85,19 @@ next_row = iterator.get_next()
 my_ESN = tfESN(n_reservoir, teacher_shift, teacher_scaling)
 currentState = my_ESN((next_row['u'], next_row['y_lag']))       
 
-#Readout
-readout = tf.layers.Dense(units = n_outputs, 
-                          use_bias = True,
-                          activation = output_activation,
-                          name = 'Readout')
+#Readout - Dense
+#readout = tf.layers.Dense(units = n_outputs, 
+#                          use_bias = True,
+#                          activation = output_activation,
+#                         name = 'ReadoutDense')
+
+#Readout - GRU
+readout = tf.keras.layers.GRU(units = n_outputs,
+                              name = 'ReadoutGRU')
 
 #Get prediction
-y_pred = tf.reshape(readout(currentState),[n_outputs,])
+print(currentState)
+y_pred = tf.reshape(readout(tf.reshape(currentState, [1,50,1])),[n_outputs,])
 
 #-------------------------------------
 #Loss
@@ -114,7 +116,9 @@ with tf.name_scope('Training_Parameters'):
 #-------------------------------------
 init_g = tf.global_variables_initializer()
 init_l = tf.local_variables_initializer()
-sess = tf.Session()
+config = tf.ConfigProto(allow_soft_placement = True)
+sess = tf.Session(config = config)
+#sess = tf.Session()
 sess.run(init_g)
 sess.run(init_l)
 sess.run(iterator.initializer, feed_dict={u: u_train, y: y_train, y_lag:y_lag_train})
