@@ -126,12 +126,12 @@ batch_size = 1
 numStrings = 1
 lengthTrain = 10000
 lengthTest = 1000
-parity = 20
+parity = 5
 teacher_shift = -0.7
 teacher_scaling = 1.12
 n_inputs = 1
 n_outputs = parity
-n_reservoir = 20
+n_reservoir = 50
 prev_state_weight = 0.1
 output_activation = tf.tanh
 train_file_location = "C:/Users/kainp1/Documents/GitHub/ReservoirComputing/training"
@@ -147,7 +147,13 @@ print('batch_size:', batch_size)
 print('Input shape', u_train.shape)
 print('Output shape', y_train.shape)
 
-#(u_test, y_test, y_lag_test) = generateParity(lengthTest, parity, numStrings) 
+(u_test, y_test, y_lag_test) = generateParity(lengthTest, parity, numStrings) 
+
+print('parity:', parity)
+print('batch_size:', batch_size) 
+print('TEST Input shape', u_test.shape)
+print('TEST Output shape', y_test.shape)
+
 
 #-------------------------------------
 #Generate Network
@@ -204,8 +210,8 @@ elif readoutLayer == "GRU":
 #Loss
 #-------------------------------------
 with tf.name_scope('Training_Parameters'):
-    loss = tf.losses.mean_squared_error(labels=next_row['y'], predictions=tf.reshape(y_preds, [parity, batch_size]))
-    #loss = tf.losses.mean_squared_error(labels=next_row['y'], predictions=tf.transpose(y_preds, (1,0)))
+    #loss = tf.losses.mean_squared_error(labels=next_row['y'], predictions=tf.reshape(y_preds, [parity, batch_size]))
+    loss = tf.losses.mean_squared_error(labels=next_row['y'], predictions=tf.transpose(y_preds, (1,0)))
 
     #print(loss)
     #-------------------------------------
@@ -274,11 +280,11 @@ for i in range(lengthTrain):
         print(last100Preds.shape)
         #last100Preds = last100Preds.reshape([100,parity, batch_size])
         oneHotPreds = (last100Preds == last100Preds.max(axis=1)[:,None]).astype(int)
-        print(oneHotPreds[:,:,0])
+        #print(oneHotPreds[:,:,0])
         #print(oneHotPreds.shape)
         last100True = np.transpose(np.array(y_train[i-100:i]), (2,1,0))
         #print(last100True.shape)
-        print(last100True[:,:,0])
+        #print(last100True[:,:,0])
         
         #print(oneHotPreds)
         #print(last100True[0])
@@ -286,8 +292,8 @@ for i in range(lengthTrain):
         
         print('----------------------------------')
         #print(np.abs(oneHotPreds - last100True))
-        #print(np.sum(np.abs(oneHotPreds - last100True)))
-        hammingAcc = 1 - np.sum(np.abs(oneHotPreds - last100True)) / parity / 100
+        print(np.sum(np.abs(oneHotPreds - last100True)))
+        hammingAcc = 1 - np.sum(np.abs(oneHotPreds - last100True)) / parity / 100 / batch_size
         print('Accuracy for last 100:', hammingAcc * 100, '%')
 
         writer.add_summary(summary, i)
@@ -304,24 +310,26 @@ sess.run(iterator.initializer, feed_dict={u: u_test, y: y_test, y_lag:y_lag_test
 
 preds = []
 for i in range(lengthTest):
-    #Do a single passthrough
-    (summary, _, current_loss, cur_acc_op, cur_acc, predictions) = sess.run((merged_summary, train, loss, acc_op, acc, y_pred))
+    #Run one timestep
+    (summary, _, current_loss, cur_acc_op, cur_acc, predictions) = sess.run((merged_summary, train, loss, acc_op, acc, y_preds))
     preds.append(predictions)
     
-    #Status update
+    #Give status update
     if (i+1) % 1000 == 0:
-        print(round(i / lengthTest * 100), '% complete') 
+        print(round(i / lengthTest * 100), '% complete')  
     
-    #Write to tensorboard
+    #Write summary to tensorboard
     if (i % 100 == 0) and (i != 0):
         
         #Calculate and write hamming accuracy!
-        last100Preds = np.array(preds[i-100:i])
+        
+        last100Preds = np.transpose(np.array(preds[i-100:i]), (1,2,0))
         oneHotPreds = (last100Preds == last100Preds.max(axis=1)[:,None]).astype(int)
-        last100True = np.array(y_test[i-100:i])
-        
-        
-        hammingAcc = 1 - np.sum(np.abs(oneHotPreds - last100True)) / 2 / 100
+
+        last100True = np.transpose(np.array(y_train[i-100:i]), (2,1,0))
+        print('----------------------------------')
+        print(np.sum(np.abs(oneHotPreds - last100True)))
+        hammingAcc = 1 - np.sum(np.abs(oneHotPreds - last100True)) / parity / 100 / batch_size
         print('Accuracy for last 100:', hammingAcc * 100, '%')
 
         test_writer.add_summary(summary, i)

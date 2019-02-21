@@ -125,7 +125,7 @@ class tfESN(tf.keras.layers.Layer):
         print('---------------------------------------------------------')
         print('currentPassed',currentPassed.shape)
         print('currentPrevious',currentPrevious.shape)
-        print('state:', self.x)
+        #print('state:', self.x)
         
         partInput = tf.reshape(tf.tensordot(self.W_in, currentPassed, 1),[1, self.n_reservoir], name = 'partInput')
         print('partInput', partInput.shape)
@@ -142,7 +142,7 @@ class tfESN(tf.keras.layers.Layer):
         print('currentState', currentState.shape)
         self.x[i] = currentState
         currentStates.append(currentState)
-        print('List of States:',currentStates)
+        #print('List of States:',currentStates)
         
         tf.summary.histogram('passed', passed)
         tf.summary.histogram("partInput", partInput)
