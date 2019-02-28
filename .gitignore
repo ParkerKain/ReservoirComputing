@@ -3,3 +3,15 @@
 TF Example.py
 testing
 training
+Parkinsons
+*.xlsx
+*.swp
+*~
+*.pyc
+*.docx
+parityGenerator.py
+Poster.pptx
+TEST.py
+GRU_LSTM_Testing.py
+GRU_LSTM2.py
+GRU Test.py
