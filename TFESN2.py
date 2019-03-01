@@ -69,36 +69,59 @@ def generateParity(length, parity, numStrings = 1):
 #---------------------------------------------------------------------------
     
 #tf.set_random_seed(1234)
+problem = 'Parity'
 readoutLayer = "Dense"
-batch_size = 10
-numStrings = 10
+batch_size = 20 #MUST BE 40 FOR PARKINSONS
+numStrings = 20 #MUST BE 40 FOR PARKINSONS
 lengthTrain = 10000
 lengthTest = 1000
-parity = 100
+parity = 2 #REALLY Is the number of outputs, must be 2 for Parkinsons
 teacher_shift = -0.7
 teacher_scaling = 1.12
-n_inputs = 1
+n_inputs = 1 #BE CAREFUL, must be 5 for parkinsons ATM
 n_outputs = parity
-n_reservoir = 200
+n_reservoir = 100
 prev_state_weight = 0.1
 output_activation = tf.tanh
 train_file_location = "C:/Users/kainp1/Documents/GitHub/ReservoirComputing/training"
 test_file_location = "C:/Users/kainp1/Documents/GitHub/ReservoirComputing/testing"
 
+#OKAY PARKER - RIGHT NOW YOU NEED TO GO AND REMOVE THE LINE FROM PREVIOUS OUTPUT, IT'S CHEATING
+
 #---------------------------------------------------------------------------
 #Define the Data
 #---------------------------------------------------------------------------
 start_time = time.time()
-(u_train, y_train, y_lag_train) = generateParity(lengthTrain, parity, numStrings)
+if problem == 'Parity':
+    (u_train, y_train, y_lag_train) = generateParity(lengthTrain, parity, numStrings)
+    print(u_train.shape)
+    u_train = np.expand_dims(u_train, 1)
+    print(u_train.shape)
+    print(y_train.shape)
+    print(y_lag_train.shape)
+    
+    (u_test, y_test, y_lag_test) = generateParity(lengthTest, parity, numStrings) 
+    
+    u_test = np.expand_dims(u_test, 1)
 
-(u_test, y_test, y_lag_test) = generateParity(lengthTest, parity, numStrings) 
+    
+if problem == 'Parkinsons':
+    
+    u_train = np.load('u_train.npy')
+    y_train = np.load('y_train.npy')
+    y_lag_train = np.load('y_lag_train.npy')
 
+    print(u_train.shape)
+    print(y_train.shape)
+    print(y_lag_train.shape)
+    
+    print('NOT YET IMPLEMENTED')
 #-------------------------------------
 #Generate Network
 #-------------------------------------
 
 #Make Iterator
-u, y, y_lag = (tf.placeholder(tf.float32, shape=[None,batch_size]), 
+u, y, y_lag = (tf.placeholder(tf.float32, shape=[None, None, batch_size]), 
               tf.placeholder(tf.float32, shape=[None,n_outputs,batch_size]), 
               tf.placeholder(tf.float32, shape=[None,n_outputs,batch_size]))
 
@@ -111,10 +134,11 @@ next_row = iterator.get_next()
 
 #Make Reservoir
 my_ESN = tfESN(n_reservoir, batch_size, n_inputs, teacher_shift, teacher_scaling, prev_state_weight)
+my_ESN2 = tfESN(n_reservoir, batch_size, n_inputs, teacher_shift, teacher_scaling, prev_state_weight)
 
 currentState = my_ESN((next_row['u'], next_row['y_lag']))       
-
 combinedStates = tf.concat(currentState, axis = 0)
+
 #Readout initializing
 if readoutLayer == "Dense":
     
@@ -233,4 +257,4 @@ for i in range(lengthTest):
 
         test_writer.add_summary(summary, i)
 
-print(time.time() - start_time)
+print('Runtime:', round(time.time() - start_time,2), 'seconds')
