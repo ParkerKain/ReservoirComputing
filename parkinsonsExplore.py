@@ -32,7 +32,8 @@ zeroPadded = []
 for df in dfs:
     for i in range(maxLength):
         if i >= len(df):
-            df = df.append({'X' : 0 , 'Y' : 0, 'Z' : 0, 'Pressure' : 0, 'GripAngle' : 0, 'Timestamp' : 0, 'ID' : 0}, ignore_index = True)
+            df = df.append({'X' : 0 , 'Y' : 0, 'Z' : 0, 'Pressure' : 0, 
+                            'GripAngle' : 0, 'Timestamp' : 0, 'ID' : 0}, ignore_index = True)
     zeroPadded.append(df)
             
 for df in zeroPadded:
