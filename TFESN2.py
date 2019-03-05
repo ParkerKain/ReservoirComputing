@@ -227,7 +227,7 @@ for i in range(lengthTrain):
 #-------------------------------------
 #Testing
 #-------------------------------------
-#sess = tf_debug.LocalCLIDebugWrapperSession(sess) #Debugging
+#sess = tf_debug.LocalCLIDebugWrapperSession(sess) #Debugging.
 print('Switching to Test ... ')
 
 #Reinitialize data with test set

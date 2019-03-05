@@ -111,7 +111,7 @@ class tfESN(tf.keras.layers.Layer):
     f2 = lambda: lastPredOutput
     toUse = tf.case([(tf.less(randomNum, prob), f1)], default=f2)
     
-    #Set up variables that will keep hold of states and outputs as they accrue below
+    #Set up variables that will keep hold of states and outputs as they accrue below.
     currentStates = []
     
     #Loop for batches, grab each input, pass it through the reservoir, append outputs.
