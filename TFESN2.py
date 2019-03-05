@@ -87,6 +87,9 @@ output_activation = tf.tanh
 train_file_location = "C:/Users/kainp1/Documents/GitHub/ReservoirComputing/training"
 test_file_location = "C:/Users/kainp1/Documents/GitHub/ReservoirComputing/testing"
 
+#Curriculum learning working hypers
+#batch 10, lengthTrain 5000, lengthTEst 1000, parity 2, n_reservoir 100
+
 #---------------------------------------------------------------------------
 #Define the Data
 #---------------------------------------------------------------------------
@@ -123,7 +126,6 @@ y_preds_copy = tf.placeholder(tf.float32, shape=[n_outputs, batch_size])
 prob = tf.placeholder(tf.float32, shape = [None])
 
 probability = np.linspace(start= 50, stop = 0, num = lengthTrain)
-print(probability.shape)
 
 dataset = tf.data.Dataset.from_tensor_slices(({'u': u, 
                                                'y': y,
@@ -148,7 +150,6 @@ if readoutLayer == "Dense":
                               activation = output_activation,
                              name = 'ReadoutDense')
     y_preds = readout(combinedStates)
-    #y_preds_copy = tf.assign(y_preds_copy, y_preds)
 
 elif readoutLayer == "GRU":
     readout = tf.keras.layers.GRU(units = n_outputs,

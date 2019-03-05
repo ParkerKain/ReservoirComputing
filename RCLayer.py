@@ -6,8 +6,6 @@
 
 
 import tensorflow as tf
-import numpy as np
-import random
 
 class tfESN(tf.keras.layers.Layer):
 
