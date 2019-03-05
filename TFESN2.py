@@ -11,6 +11,7 @@ import numpy as np
 from RCLayer import tfESN
 from tensorflow.python import debug as tf_debug
 
+
 tf.reset_default_graph()
 
 #----------------------------------------------------------------------
@@ -46,7 +47,7 @@ def generateParity(length, parity, numStrings = 1):
             currentU = totalU[i, string]
             currentParity = (currentParity + currentU) % parity
             
-            parityState = np.zeros((1, parity)) 
+            parityState = np.zeros((1, parity))
             parityState[:,currentParity] = 1
             
             parityState = parityState
@@ -71,9 +72,9 @@ def generateParity(length, parity, numStrings = 1):
 #tf.set_random_seed(1234)
 problem = 'Parity'
 readoutLayer = "Dense"
-batch_size = 20 #MUST BE 40 FOR PARKINSONS
-numStrings = 20 #MUST BE 40 FOR PARKINSONS
-lengthTrain = 10000
+batch_size = 10 #MUST BE 40 FOR PARKINSONS
+numStrings = 10 #MUST BE 40 FOR PARKINSONS
+lengthTrain = 5000
 lengthTest = 1000
 parity = 2 #REALLY Is the number of outputs, must be 2 for Parkinsons
 teacher_shift = -0.7
@@ -86,22 +87,15 @@ output_activation = tf.tanh
 train_file_location = "C:/Users/kainp1/Documents/GitHub/ReservoirComputing/training"
 test_file_location = "C:/Users/kainp1/Documents/GitHub/ReservoirComputing/testing"
 
-#OKAY PARKER - RIGHT NOW YOU NEED TO GO AND REMOVE THE LINE FROM PREVIOUS OUTPUT, IT'S CHEATING
-
 #---------------------------------------------------------------------------
 #Define the Data
 #---------------------------------------------------------------------------
 start_time = time.time()
 if problem == 'Parity':
     (u_train, y_train, y_lag_train) = generateParity(lengthTrain, parity, numStrings)
-    print(u_train.shape)
     u_train = np.expand_dims(u_train, 1)
-    print(u_train.shape)
-    print(y_train.shape)
-    print(y_lag_train.shape)
-    
     (u_test, y_test, y_lag_test) = generateParity(lengthTest, parity, numStrings) 
-    
+    y_lag_test = np.zeros((lengthTest, parity, batch_size))
     u_test = np.expand_dims(u_test, 1)
 
     
@@ -119,24 +113,31 @@ if problem == 'Parkinsons':
 #-------------------------------------
 #Generate Network
 #-------------------------------------
-
 #Make Iterator
 u, y, y_lag = (tf.placeholder(tf.float32, shape=[None, None, batch_size]), 
-              tf.placeholder(tf.float32, shape=[None,n_outputs,batch_size]), 
-              tf.placeholder(tf.float32, shape=[None,n_outputs,batch_size]))
+              tf.placeholder(tf.float32, shape=[None, n_outputs, batch_size]), 
+              tf.placeholder(tf.float32, shape=[None, n_outputs, batch_size]))
+
+predictions = np.zeros((parity, batch_size))
+y_preds_copy = tf.placeholder(tf.float32, shape=[n_outputs, batch_size])
+prob = tf.placeholder(tf.float32, shape = [None])
+
+probability = np.linspace(start= 50, stop = 0, num = lengthTrain)
+print(probability.shape)
 
 dataset = tf.data.Dataset.from_tensor_slices(({'u': u, 
                                                'y': y,
-                                               'y_lag':y_lag}))
+                                               'y_lag':y_lag,
+                                               'prob':prob}))
     
 iterator = dataset.make_initializable_iterator()
 next_row = iterator.get_next()
 
 #Make Reservoir
-my_ESN = tfESN(n_reservoir, batch_size, n_inputs, teacher_shift, teacher_scaling, prev_state_weight)
-my_ESN2 = tfESN(n_reservoir, batch_size, n_inputs, teacher_shift, teacher_scaling, prev_state_weight)
+my_ESN = tfESN(n_reservoir, batch_size, n_inputs,lengthTrain,  teacher_shift, teacher_scaling, prev_state_weight)
+#my_ESN2 = tfESN(n_reservoir, batch_size, n_inputs, teacher_shift, teacher_scaling, prev_state_weight)
 
-currentState = my_ESN((next_row['u'], next_row['y_lag']))       
+currentState = my_ESN((next_row['u'], next_row['y_lag'], y_preds_copy, next_row['prob']))    
 combinedStates = tf.concat(currentState, axis = 0)
 
 #Readout initializing
@@ -147,13 +148,13 @@ if readoutLayer == "Dense":
                               activation = output_activation,
                              name = 'ReadoutDense')
     y_preds = readout(combinedStates)
+    #y_preds_copy = tf.assign(y_preds_copy, y_preds)
 
 elif readoutLayer == "GRU":
     readout = tf.keras.layers.GRU(units = n_outputs,
                                   name = 'ReadoutGRU')
 
     Transformed_3D = readout(tf.reshape(combinedStates, [batch_size,n_reservoir,1]))
-
     y_preds = Transformed_3D
 
 #-------------------------------------
@@ -176,7 +177,7 @@ config = tf.ConfigProto(allow_soft_placement = True)
 sess = tf.Session(config = config)
 sess.run(init_g)
 sess.run(init_l)
-sess.run(iterator.initializer, feed_dict={u: u_train, y: y_train, y_lag:y_lag_train})
+sess.run(iterator.initializer, feed_dict={u: u_train, y: y_train, y_lag:y_lag_train, prob:probability})
 
 #-------------------------------------
 #Initialize Tensorboard Grpah and Summarise
@@ -199,9 +200,10 @@ preds = []
 print('Training ...')
 for i in range(lengthTrain):
     #Run one timestep
-    (summary, _, current_loss, cur_acc_op, cur_acc, predictions) = sess.run((merged_summary, train, loss, acc_op, acc, y_preds))
+    (summary, _, current_loss, cur_acc_op, cur_acc, predictions) = sess.run((merged_summary, train, loss, acc_op, acc, y_preds), feed_dict = {y_preds_copy:predictions})
     preds.append(predictions)
-    
+    predictions = np.transpose(predictions, (1,0))
+
     #Give status update
     if (i+1) % 1000 == 0:
         print(round(i / lengthTrain * 100), '% complete')  
@@ -229,13 +231,16 @@ for i in range(lengthTrain):
 print('Switching to Test ... ')
 
 #Reinitialize data with test set
-sess.run(iterator.initializer, feed_dict={u: u_test, y: y_test, y_lag:y_lag_test})
+probability = np.linspace(start= 0, stop = 0, num = lengthTest)
+sess.run(iterator.initializer, feed_dict={u: u_test, y: y_test, y_lag:y_lag_test, prob:probability})
 
 preds = []
 for i in range(lengthTest):
     #Run one timestep
-    (summary, _, current_loss, cur_acc_op, cur_acc, predictions) = sess.run((merged_summary, train, loss, acc_op, acc, y_preds))
+    (summary, _, current_loss, cur_acc_op, cur_acc, predictions) = sess.run((merged_summary, train, loss, acc_op, acc, y_preds), {y_preds_copy:predictions})
     preds.append(predictions)
+    predictions = np.transpose(predictions, (1,0))
+
     
     #Give status update
     if (i+1) % 1000 == 0:

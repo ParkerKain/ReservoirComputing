@@ -6,15 +6,19 @@
 
 
 import tensorflow as tf
+import numpy as np
+import random
 
 class tfESN(tf.keras.layers.Layer):
 
   def __init__(self, n_reservoir, 
                        batch_size,
                        n_inputs,
+                       lengthTrain,
                        teacher_shift = 0, 
                        teacher_scale = 1,
-                       prev_state_weight = 0):
+                       prev_state_weight = 0,
+                       ):
     """
     Builds any parameters that are not based on the inputs recieved by the layer
     
@@ -33,6 +37,7 @@ class tfESN(tf.keras.layers.Layer):
     self.teacher_scale = teacher_scale
     self.prev_state_weight = prev_state_weight
     self.n_inputs = n_inputs
+    self.lengthTrain = lengthTrain
     
   def build(self, inputs):
     """
@@ -88,19 +93,31 @@ class tfESN(tf.keras.layers.Layer):
                 the first element being the input to pass through the reservoir, and the second 
                 being the previous timestep's true output.
     """
+    
     #Set up passed in inputs to be correct shapes
     passed = inputs[0]
     passed = tf.reshape(passed, [self.batch_size,self.n_inputs])
 
     #Scale previous output
     lastOutput = inputs[1] * self.teacher_scale + self.teacher_shift
+    lastPredOutput = inputs[2] * self.teacher_scale + self.teacher_shift
+    prob = tf.cast(inputs[3], 'float32')
+    
+
+    #Randomly decide whether to use the correct previus output or our predicted previous output    
+    randomNum = tf.random.uniform(shape = [1], minval = 1, maxval = 100)
+    randomNum = tf.reshape(randomNum, [])
+    f1 = lambda: lastOutput
+    f2 = lambda: lastPredOutput
+    toUse = tf.case([(tf.less(randomNum, prob), f1)], default=f2)
+    
     #Set up variables that will keep hold of states and outputs as they accrue below
     currentStates = []
     
     #Loop for batches, grab each input, pass it through the reservoir, append outputs.
     for i in range(self.batch_size):
         currentPassed = passed[i]
-        currentPrevious = lastOutput[:,i]
+        currentPrevious = toUse[:,i]
         
         partInput = tf.reshape(tf.tensordot(self.W_in, currentPassed, 1),[1, self.n_reservoir], name = 'partInput')
         partReservoir = tf.transpose(tf.tensordot(self.W_res, self.x[i], 1), name = 'partReservoir')
@@ -109,19 +126,21 @@ class tfESN(tf.keras.layers.Layer):
         partPrevious = (tf.transpose(self.x[i]))
         
         currentState = (self.prev_state_weight * partPrevious) + ((1-self.prev_state_weight)*tf.tanh(tf.add_n((partInput, partReservoir, partOutput, partBias)), 'CurrentState'))
+
         self.x[i] = currentState
         currentStates.append(currentState)
         
         tf.summary.histogram('passed', passed)
         tf.summary.histogram("partInput", partInput)
         tf.summary.histogram("partReservoir", partReservoir)
-        tf.summary.histogram("partOutput", partOutput)
+        #tf.summary.histogram("partOutput", partOutput)
         tf.summary.histogram("partBias", partBias)    
         tf.summary.histogram("currentState", currentState)
         tf.summary.histogram("WeightsFromInput", self.W_in)
         tf.summary.histogram("BiasFromInput", self.B_in)
         tf.summary.histogram("WeightsFromOutput", self.W_out)
         tf.summary.histogram("WeightsFromReservoir", self.W_res)
+    
         
-    return currentStates
+    return (currentStates)
 
