@@ -20,14 +20,17 @@ def gatherData():
     path =r'C:\Users\kainp1\Documents\GitHub\ReservoirComputing\Parkinsons\hw_dataset\parkinson'
     p_filenames = glob.glob(path + "/*.txt")
     
-    filenames = c_filenames + p_filenames
+    path = r'C:\Users\kainp1\Documents\GitHub\ReservoirComputing\Parkinsons\new_dataset\parkinson'
+    h_filenames = glob.glob(path + '/*.txt')
+    
+    filenames = c_filenames + p_filenames + h_filenames
     
     #Load in each text file
     col_Names=["X", "Y", "Z", "Pressure","GripAngle","Timestamp","ID"]
     dfs = []
     
     for filename in filenames:
-        if 'P_' in filename:
+        if 'P_' in filename or 'H_' in filename:
             parkinsonsFlag = 1
         else:
             parkinsonsFlag = 0
@@ -54,7 +57,6 @@ def gatherData():
                                 'GripAngle' : 0, 'Timestamp' : 0, 'ID' : 0,
                                 'Parkinsons' : parkinsonsFlag}, ignore_index = True)
         zeroPadded.append(df)
-        print(df.iloc[9389,:])
                 
         
     #Convert to numpy array
@@ -77,7 +79,7 @@ def transformData():
     parkinsons = np.load('parkinsons.npy')
     
     #Create u_train
-    u_train = parkinsons[:,0:5,:]    
+    u_train = parkinsons[:,[0,1,3,4],:]    
     
     #Create y_train
     y = parkinsons[:,7,:]
@@ -92,15 +94,37 @@ def transformData():
     
     #Create y_lag_train
     
-    y_lag_train = np.append(np.zeros((1,2,40)), y_train, axis = 0)[:-1]
+    y_lag_train = np.append(np.zeros((1,2,76)), y_train, axis = 0)[:-1]
 
     print(u_train.shape)
     print(y_train.shape)
     print(y_lag_train.shape)
 
+    print(u_train[:,:,0])
+    print(y_train[:,:,0])
+
+    import random
+    test_nums = random.sample(range(76), 38)
+    print(test_nums)
+    
+    u_test = u_train[:,:,test_nums]
+    y_test = y_train[:,:,test_nums]
+    y_lag_test = y_lag_train[:,:,test_nums]
+    
+    u_train = np.delete(u_train, test_nums, 2)
+    y_train = np.delete(y_train, test_nums, 2)
+    y_lag_train = np.delete(y_lag_train, test_nums, 2)
+
+    print(u_train.shape)
+    
+    
+
     np.save('u_train.npy', u_train)
     np.save('y_train.npy', y_train)
     np.save('y_lag_train.npy', y_lag_train)
+    np.save('u_test.npy', u_test)
+    np.save('y_test.npy', y_test)
+    np.save('y_lag_test.npy', y_lag_test)
 
 
 #gatherData()

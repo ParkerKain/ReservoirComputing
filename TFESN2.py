@@ -11,7 +11,6 @@ import numpy as np
 from RCLayer import tfESN
 from tensorflow.python import debug as tf_debug
 
-
 tf.reset_default_graph()
 
 #----------------------------------------------------------------------
@@ -72,74 +71,87 @@ def generateParity(length, parity, numStrings = 1):
 #tf.set_random_seed(1234)
 problem = 'Parity'
 readoutLayer = "Dense"
-batch_size = 10 #MUST BE 40 FOR PARKINSONS
-numStrings = 10 #MUST BE 40 FOR PARKINSONS
+batch_size = 10 
+numStrings = 10 
 lengthTrain = 5000
-lengthTest = 1000
-parity = 2 #REALLY Is the number of outputs, must be 2 for Parkinsons
+lengthTest = 3000
+parity = 2 
 teacher_shift = -0.7
 teacher_scaling = 1.12
-n_inputs = 1 #BE CAREFUL, must be 5 for parkinsons ATM
+n_inputs = 1 
 n_outputs = parity
 n_reservoir = 100
 prev_state_weight = 0.1
+startingCurriculumProb = 50
 output_activation = tf.tanh
 train_file_location = "C:/Users/kainp1/Documents/GitHub/ReservoirComputing/training"
 test_file_location = "C:/Users/kainp1/Documents/GitHub/ReservoirComputing/testing"
 
 #Curriculum learning working hypers
-#batch 10, lengthTrain 5000, lengthTEst 1000, parity 2, n_reservoir 100
+#batch 10, lengthTrain 5000, lengthTest 1000, parity 2, n_reservoir 100
 
 #---------------------------------------------------------------------------
 #Define the Data
 #---------------------------------------------------------------------------
 start_time = time.time()
+
+#Load in data depending on problem
 if problem == 'Parity':
     (u_train, y_train, y_lag_train) = generateParity(lengthTrain, parity, numStrings)
     u_train = np.expand_dims(u_train, 1)
     (u_test, y_test, y_lag_test) = generateParity(lengthTest, parity, numStrings) 
     y_lag_test = np.zeros((lengthTest, parity, batch_size))
     u_test = np.expand_dims(u_test, 1)
-
     
 if problem == 'Parkinsons':
     
     u_train = np.load('u_train.npy')
     y_train = np.load('y_train.npy')
     y_lag_train = np.load('y_lag_train.npy')
+    u_test = np.load('u_test.npy')
+    y_test = np.load('y_test.npy')
+    y_lag_test = np.load('y_lag_test.npy')
 
-    print(u_train.shape)
-    print(y_train.shape)
-    print(y_lag_train.shape)
-    
-    print('NOT YET IMPLEMENTED')
+    batch_size = 38
+    numStrings = 38
+    parity = 2
+    n_inputs = 4
+    lengthTrain = 12045
+    lengthTest = 12045
+
 #-------------------------------------
 #Generate Network
 #-------------------------------------
 #Make Iterator
-u, y, y_lag = (tf.placeholder(tf.float32, shape=[None, None, batch_size]), 
-              tf.placeholder(tf.float32, shape=[None, n_outputs, batch_size]), 
-              tf.placeholder(tf.float32, shape=[None, n_outputs, batch_size]))
+u, y, y_lag = (tf.placeholder(tf.float32, shape=[None, n_inputs, batch_size], name = 'u'), 
+              tf.placeholder(tf.float32, shape=[None, n_outputs, batch_size], name = 'y'), 
+              tf.placeholder(tf.float32, shape=[None, n_outputs, batch_size], name = 'y_lag'))
 
+#Set list of probabilities for curriculum learning
 predictions = np.zeros((parity, batch_size))
 y_preds_copy = tf.placeholder(tf.float32, shape=[n_outputs, batch_size])
-prob = tf.placeholder(tf.float32, shape = [None])
+prob = tf.placeholder(tf.float32, shape = [None], name = 'prob')
+probability = np.linspace(start= startingCurriculumProb, stop = 0, num = lengthTrain)
 
-probability = np.linspace(start= 50, stop = 0, num = lengthTrain)
-
+#Set dataset for actual data
 dataset = tf.data.Dataset.from_tensor_slices(({'u': u, 
                                                'y': y,
-                                               'y_lag':y_lag,
-                                               'prob':prob}))
+                                               'y_lag':y_lag}))
     
+#Set dataset for curriculum learning probs
+dataset2 = tf.data.Dataset.from_tensor_slices({'prob':prob})
+    
+#Make iterators for above datasets
 iterator = dataset.make_initializable_iterator()
+iterator2 = dataset2.make_initializable_iterator()
+
 next_row = iterator.get_next()
+next_row2 = iterator2.get_next()
 
 #Make Reservoir
 my_ESN = tfESN(n_reservoir, batch_size, n_inputs,lengthTrain,  teacher_shift, teacher_scaling, prev_state_weight)
-#my_ESN2 = tfESN(n_reservoir, batch_size, n_inputs, teacher_shift, teacher_scaling, prev_state_weight)
 
-currentState = my_ESN((next_row['u'], next_row['y_lag'], y_preds_copy, next_row['prob']))    
+currentState = my_ESN((next_row['u'], next_row['y_lag'], y_preds_copy, next_row2['prob']))    
 combinedStates = tf.concat(currentState, axis = 0)
 
 #Readout initializing
@@ -178,7 +190,8 @@ config = tf.ConfigProto(allow_soft_placement = True)
 sess = tf.Session(config = config)
 sess.run(init_g)
 sess.run(init_l)
-sess.run(iterator.initializer, feed_dict={u: u_train, y: y_train, y_lag:y_lag_train, prob:probability})
+sess.run(iterator.initializer, feed_dict={u: u_train, y: y_train, y_lag:y_lag_train})
+sess.run(iterator2.initializer, feed_dict = {prob:probability})
 
 #-------------------------------------
 #Initialize Tensorboard Grpah and Summarise
@@ -233,7 +246,9 @@ print('Switching to Test ... ')
 
 #Reinitialize data with test set
 probability = np.linspace(start= 0, stop = 0, num = lengthTest)
-sess.run(iterator.initializer, feed_dict={u: u_test, y: y_test, y_lag:y_lag_test, prob:probability})
+sess.run(iterator.initializer, feed_dict={u: u_test, y: y_test, y_lag:y_lag_test})
+sess.run(iterator2.initializer, feed_dict = {prob:probability})
+
 
 preds = []
 for i in range(lengthTest):
